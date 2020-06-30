@@ -1,3 +1,19 @@
+# No files without extension...
+*
+!/**/
+!*.*
+
+# ...except for the makefile
+!Makefile
+
+# OS files
+.DS_Store
+._*
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+
 # IDE folders
 .idea/
 cmake-build-debug/
