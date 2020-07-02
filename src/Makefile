@@ -27,13 +27,14 @@
 FF_ROOT = /usr/local/include/fastflow
 
 CXX			= g++-9 -std=c++17 -Wall #-pedantic
-INCLUDES	= #-I $(FF_ROOT)
+INCLUDES	= -I . #-I $(FF_ROOT)
 CXXFLAGS	= #-g -DTRACE_FASTFLOW -DNO_DEFAULT_MAPPING -DBLOCKING_MODE -DFF_BOUNDED_BUFFER
 
 LDFLAGS 	= -pthread
-OPTFLAGS	= -O3 -finline-functions -fopt-info-vec -fopt-info-vec-missed #-DNDEBUG
+OPTFLAGS	= -O3 -finline-functions -fopt-info-vec #-fopt-info-vec-missed #-DNDEBUG
 
-TARGETS 	= seq
+TARGETS 	= seq	\
+              par
 
 
 .PHONY: all clean cleanall
