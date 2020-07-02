@@ -22,7 +22,7 @@ int odd_even_sort(std::vector<T> &v, int start) {
 }
 
 int main() {
-    auto v = create_random_vector<vec_type>(100000, MIN, MAX, SEED);
+    auto v = create_random_vector<vec_type>(N_ELEM, MIN, MAX, SEED);
     int swaps;
 
     auto start = std::chrono::system_clock::now();
