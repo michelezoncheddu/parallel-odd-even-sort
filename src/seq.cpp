@@ -9,7 +9,7 @@
 
 template <typename T>
 int odd_even_sort(std::vector<T> &v, int start) {
-    auto swaps{0};
+    auto swaps = 0;
     for (size_t i = start; i < v.size() - 1; i += 2) {
         auto first = v[i], second = v[i + 1];
         auto cond = first > second;

@@ -19,7 +19,7 @@ class barrier {
             ++generation;
         } else {
             while (generation == my_generation)
-                ; // or yeld
+                ; // std::this_thread::yield();
         }
     }
 };
