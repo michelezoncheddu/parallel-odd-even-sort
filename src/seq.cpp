@@ -21,8 +21,16 @@ int odd_even_sort(std::vector<T> &v, int start) {
     return swaps;
 }
 
-int main() {
-    auto v = create_random_vector<vec_type>(N_ELEM, MIN, MAX, SEED);
+int main(int argc, char const *argv[]) {
+    if (argc < 2) {
+        std::cout << "Usage is " << argv[0]
+                  << " n" << std::endl;
+        return -1;
+    }
+
+    auto const n = strtol(argv[1], nullptr, 10);
+
+    auto v = create_random_vector<vec_type>(n, MIN, MAX, SEED);
     int swaps;
 
     auto start = std::chrono::system_clock::now();
