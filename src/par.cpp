@@ -28,15 +28,15 @@ type odd_even_sort(T *v, short phase, size_t end) {
 }
 
 template <typename T>
-void f(unsigned thid, T *v, size_t end, barrier &barrier) {
+void f(unsigned thid, T *v, size_t end, int alignment, barrier &barrier) {
     type odd, even;
     do {
         barrier.wait();
         if (thid == 0)
             global_swaps = 0;
-        odd = odd_even_sort(v, 1, end);
+        odd = odd_even_sort(v, !alignment, end);
         barrier.wait();
-        even = odd_even_sort(v, 0, end);
+        even = odd_even_sort(v, alignment, end);
         global_swaps |= (odd || even);
         barrier.wait();
     } while (odd || even || global_swaps);
@@ -77,12 +77,12 @@ int main(int argc, char const *argv[]) {
     auto const start_time = std::chrono::system_clock::now();
     for (unsigned i = 0; i < nw - 1; ++i) {
 //        std::cout << offset << " 1, " << chunk_len + (remaining > 0) << std::endl;
-        threads[i] = new std::thread(f<vec_type>, i, ptr + offset, chunk_len + (remaining > 0), std::ref(barrier));
+        threads[i] = new std::thread(f<vec_type>, i + 1, ptr + offset, chunk_len + (remaining > 0), offset % 2, std::ref(barrier));
         offset += chunk_len + (remaining > 0);
         --remaining;
     }
 //    std::cout << offset << " 2, " << chunk_len - 1 << std::endl;
-    threads[threads.size() - 1] = new std::thread(f<vec_type>, threads.size() - 1, ptr + offset, chunk_len - 1, std::ref(barrier));
+    threads[threads.size() - 1] = new std::thread(f<vec_type>, 0, ptr + offset, chunk_len - 1, offset % 2, std::ref(barrier));
 
     for (auto thread : threads)
         thread->join();
