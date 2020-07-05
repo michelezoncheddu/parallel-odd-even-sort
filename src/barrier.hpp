@@ -4,10 +4,10 @@
 #include <atomic>
 
 class barrier {
-   private:
+private:
     std::atomic<int> n;
 
-   public:
+public:
     explicit barrier(int n);
 
     void set_t(int in);

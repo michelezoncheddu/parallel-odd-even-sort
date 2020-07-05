@@ -31,22 +31,21 @@ INCLUDES	= -I . #-I $(FF_ROOT)
 CXXFLAGS	= #-g -DTRACE_FASTFLOW -DNO_DEFAULT_MAPPING -DBLOCKING_MODE -DFF_BOUNDED_BUFFER
 
 LDFLAGS 	= -pthread
-OPTFLAGS	= -O3 -fopt-info-vec #-fopt-info-vec-missed #-DNDEBUG
+OPTFLAGS	= -O3 #-fopt-info-vec -fopt-info-vec-missed #-DNDEBUG
 
 TARGETS 	= seq	\
               par
 
-
 .PHONY: all clean cleanall
 .SUFFIXES: .cpp
-
 
 %: %.cpp
 	$(CXX) $(CXXFLAGS) $(INCLUDES) $(OPTFLAGS) -o $@ $< $(LDFLAGS)
 
-all: targets
+all: $(TARGETS)
 
-targets: $(TARGETS)
+par: par.cpp barrier.cpp
+	$(CXX) $(CXXFLAGS) barrier.cpp $(INCLUDES) $(OPTFLAGS) -o $@ $< $(LDFLAGS)
 
 clean:
 	rm -f $(TARGETS)

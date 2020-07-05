@@ -1,4 +1,4 @@
-#include "barrier.hpp"
+#include <barrier.hpp>
 
 barrier::barrier(int n) : n{n} {}
 
