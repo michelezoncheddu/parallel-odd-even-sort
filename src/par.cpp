@@ -9,7 +9,6 @@
 #include <config.hpp>
 #include <util.hpp>
 
-
 std::atomic<int> global_swaps = 0;
 
 template <typename T>
@@ -27,7 +26,7 @@ int odd_even_sort(T *v, short phase, size_t end) {
 }
 
 template <typename T>
-void f(unsigned thid, T *v, size_t end, int alignment, std::vector<std::unique_ptr<abar>> &barriers) {
+void f(unsigned thid, T *v, size_t end, int alignment, std::vector<std::unique_ptr<barrier>> &barriers) {
     auto iter = 0;
     while (true) {
         if (thid == 0)
@@ -68,10 +67,10 @@ int main(int argc, char const *argv[]) {
     auto const ptr = v.data();
 
     //barrier barrier(nw);
-    std::vector<std::unique_ptr<abar>> barriers;
+    std::vector<std::unique_ptr<barrier>> barriers;
     barriers.resize(n * 3);
     for (auto &elem : barriers)
-        elem = std::make_unique<abar>(nw);
+        elem = std::make_unique<barrier>(nw);
 
     std::vector<std::unique_ptr<std::thread>> threads(nw);
 
