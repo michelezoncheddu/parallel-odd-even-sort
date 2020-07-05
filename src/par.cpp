@@ -9,12 +9,11 @@
 #include <config.hpp>
 #include <util.hpp>
 
-using type = int;
 
-std::atomic<type> global_swaps = 0;
+std::atomic<int> global_swaps = 0;
 
 template <typename T>
-type odd_even_sort(T *v, short phase, size_t end) {
+int odd_even_sort(T *v, short phase, size_t end) {
     auto swaps = 0;
     for (size_t i = phase; i < end; i += 2) {
         auto first = v[i], second = v[i + 1];
@@ -28,30 +27,31 @@ type odd_even_sort(T *v, short phase, size_t end) {
 }
 
 template <typename T>
-void f(unsigned thid, T *v, size_t end, int alignment, barrier &barrier) {
-    type odd, even;
-    do {
-        barrier.wait();
+void f(unsigned thid, T *v, size_t end, int alignment, std::vector<std::unique_ptr<abar>> &barriers) {
+    auto iter = 0;
+    while (true) {
+        if (thid == 0)
+            global_swaps = 0;
+        bool odd = odd_even_sort(v, !alignment, end);
+        barriers[iter++]->wait();
+        bool even = odd_even_sort(v, alignment, end);
+        global_swaps |= (odd || even);
+        barriers[iter++]->wait();
+        if (!odd && !even && !global_swaps)
+            break;
+        barriers[iter++]->wait();
+    }
+
+    /*do { // slower
+        barriers[iter++]->wait();
         if (thid == 0)
             global_swaps = 0;
         odd = odd_even_sort(v, !alignment, end);
-        barrier.wait();
+        barriers[iter++]->wait();
         even = odd_even_sort(v, alignment, end);
         global_swaps |= (odd || even);
-        barrier.wait();
-    } while (odd || even || global_swaps);
-//    while (true) {
-//        if (thid == 0)
-//            global_swaps = 0;
-//        bool odd = odd_even_sort(v, 1, end);
-//        barrier.wait();
-//        bool even = odd_even_sort(v, 0, end);
-//        global_swaps |= (odd || even);
-//        barrier.wait();
-//        if (!odd && !even && !global_swaps)
-//            break;
-//        barrier.wait();
-//    }
+        barriers[iter++]->wait();
+    } while (odd || even || global_swaps);*/
 }
 
 int main(int argc, char const *argv[]) {
@@ -67,8 +67,13 @@ int main(int argc, char const *argv[]) {
     auto v = create_random_vector<vec_type>(n, MIN, MAX, SEED);
     auto const ptr = v.data();
 
-    barrier barrier(nw);
-    std::vector<std::thread*> threads(nw);
+    //barrier barrier(nw);
+    std::vector<std::unique_ptr<abar>> barriers;
+    barriers.resize(n * 3);
+    for (auto &elem : barriers)
+        elem = std::make_unique<abar>(nw);
+
+    std::vector<std::unique_ptr<std::thread>> threads(nw);
 
     size_t const chunk_len = v.size() / nw;
     int remaining = static_cast<int>(v.size() % nw);
@@ -76,15 +81,17 @@ int main(int argc, char const *argv[]) {
 
     auto const start_time = std::chrono::system_clock::now();
     for (unsigned i = 0; i < nw - 1; ++i) {
-//        std::cout << offset << " 1, " << chunk_len + (remaining > 0) << std::endl;
-        threads[i] = new std::thread(f<vec_type>, i + 1, ptr + offset, chunk_len + (remaining > 0), offset % 2, std::ref(barrier));
+        //std::cout << offset << " 1, " << chunk_len + (remaining > 0) << std::endl;
+        threads[i] = std::make_unique<std::thread>(
+                f<vec_type>, i, ptr + offset, chunk_len + (remaining > 0), offset % 2, std::ref(barriers));
         offset += chunk_len + (remaining > 0);
         --remaining;
     }
-//    std::cout << offset << " 2, " << chunk_len - 1 << std::endl;
-    threads[threads.size() - 1] = new std::thread(f<vec_type>, 0, ptr + offset, chunk_len - 1, offset % 2, std::ref(barrier));
+    //std::cout << offset << " 2, " << chunk_len - 1 << std::endl;
+    threads[threads.size() - 1] = std::make_unique<std::thread>(
+            f<vec_type>, threads.size() - 1, ptr + offset, chunk_len - 1, offset % 2, std::ref(barriers));
 
-    for (auto thread : threads)
+    for (auto &thread : threads)
         thread->join();
     auto const duration = std::chrono::duration_cast<std::chrono::milliseconds>(
             std::chrono::system_clock::now() - start_time).count();
