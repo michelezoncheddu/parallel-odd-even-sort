@@ -45,7 +45,7 @@ TARGETS 	= seq	\
 all: $(TARGETS)
 
 par: par.cpp barrier.cpp
-	$(CXX) $(CXXFLAGS) barrier.cpp $(INCLUDES) $(OPTFLAGS) -o $@ $< $(LDFLAGS)
+	$(CXX) $(CXXFLAGS) $(INCLUDES) $(OPTFLAGS) barrier.cpp -o $@ $< $(LDFLAGS)
 
 clean:
 	rm -f $(TARGETS)

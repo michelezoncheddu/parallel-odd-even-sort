@@ -20,3 +20,7 @@ void barrier::wait() {
     while (n != 0)
         ;
 }
+
+int barrier::read() {
+    return n;
+}

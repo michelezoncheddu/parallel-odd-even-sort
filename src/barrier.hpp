@@ -17,6 +17,8 @@ public:
     void stop();
 
     void wait();
+
+    int read();
 };
 
 #endif // ODD_EVEN_SORT_BARRIER_HPP
