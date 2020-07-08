@@ -9,14 +9,11 @@
 #include <config.hpp>
 #include <util.hpp>
 
-struct shared_t {
-    vec_type left;
-    vec_type right;
-};
-
-std::vector<shared_t> shared;
+std::vector<vec_type> shared;
 
 std::atomic<int> global_swaps = 0;
+
+unsigned constexpr padding = 64 / sizeof(vec_type) / 2;
 
 int nw;
 
@@ -41,31 +38,44 @@ void f(unsigned thid, T *v, size_t end, bool alignment, std::vector<std::unique_
         local_vector.push_back(v[i]);
 
     auto iter = 0;
+    auto const my_end = local_vector.size() - 1;
+    auto const has_right_neigh = thid < nw - 1;
 
-    shared[thid].left = local_vector[0];
-    shared[thid].right = local_vector[local_vector.size() - 1];
+    shared[thid * padding] = local_vector[0];
     barriers[iter++]->wait();
 
     while (true) {
         if (thid == 0)
             global_swaps = 0;
 
-        if (thid < nw - 1)
-            local_vector[local_vector.size() - 1] = std::min(shared[thid + 1].right, local_vector[local_vector.size() - 1]);
-        if (thid > 0)
-            local_vector[0] = std::max(shared[thid - 1].left, local_vector[0]);
-        bool odd = odd_even_sort(local_vector.data(), !alignment, end);
-        shared[thid].left = local_vector[0];
-        shared[thid].right = local_vector[end - 1];
+        bool odd = odd_even_sort(local_vector.data(), !alignment, my_end);
+        if (has_right_neigh && my_end % 2 != alignment) {
+            if (local_vector[my_end] > shared[(thid + 1) * padding]) {
+                std::swap(local_vector[my_end], shared[(thid + 1) * padding]);
+                odd = true;
+            }
+        }
+
+        if (!alignment)
+            local_vector[0] = shared[thid * padding];
+        else
+            shared[thid * padding] = local_vector[0];
+
         barriers[iter++]->wait();
 
-        if (thid < nw - 1)
-            local_vector[local_vector.size() - 1] = std::min(shared[thid + 1].right, local_vector[local_vector.size() - 1]);
-        if (thid > 0)
-            local_vector[0] = std::max(shared[thid - 1].left, local_vector[0]);
-        bool even = odd_even_sort(local_vector.data(), alignment, end);
-        shared[thid].left = local_vector[0];
-        shared[thid].right = local_vector[end - 1];
+        bool even = odd_even_sort(local_vector.data(), alignment, my_end);
+        if (has_right_neigh && my_end % 2 == alignment) {
+            if (local_vector[my_end] > shared[(thid + 1) * padding]) {
+                std::swap(local_vector[my_end], shared[(thid + 1) * padding]);
+                even = true;
+            }
+        }
+
+        if (alignment)
+            local_vector[0] = shared[thid * padding];
+        else
+            shared[thid * padding] = local_vector[0];
+
         global_swaps |= (odd || even);
         barriers[iter++]->wait();
 
@@ -73,11 +83,14 @@ void f(unsigned thid, T *v, size_t end, bool alignment, std::vector<std::unique_
             break;
         barriers[iter++]->wait();
     }
-    std::is_sorted(local_vector.begin(), local_vector.end());
-    /*std::this_thread::sleep_for(std::chrono::milliseconds(100 * thid));
-    for (auto elem : local_vector)
-        std::cout << elem << " ";
-    std::cout << std::endl;*/
+
+    for (auto i = 0; i < local_vector.size(); ++i)
+        v[i] = local_vector[i];
+
+//    std::this_thread::sleep_for(std::chrono::milliseconds(100 * thid));
+//    for (auto elem : local_vector)
+//        std::cout << elem << " ";
+//    std::cout << std::endl;
 }
 
 int main(int argc, char const *argv[]) {
@@ -93,11 +106,15 @@ int main(int argc, char const *argv[]) {
     auto v = create_random_vector<vec_type>(n, MIN, MAX, SEED);
     auto const ptr = v.data();
 
-    shared = std::vector<shared_t>(nw);
+//    for (auto elem : v)
+//        std::cout << elem << " ";
+//    std::cout << std::endl;
+
+    shared = std::vector<vec_type>(nw * padding);
 
     //barrier barrier(nw);
     std::vector<std::unique_ptr<barrier>> barriers;
-    barriers.resize(n * 5);
+    barriers.resize(n * 4);
     for (auto &elem : barriers)
         elem = std::make_unique<barrier>(nw);
 
@@ -126,6 +143,6 @@ int main(int argc, char const *argv[]) {
 
     std::cout << duration << std::endl;
 
-    //assert(std::is_sorted(v.begin(), v.end()));
+    assert(std::is_sorted(v.begin(), v.end()));
     return 0;
 }
