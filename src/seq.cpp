@@ -2,6 +2,7 @@
 #include <cassert>
 #include <chrono>
 #include <iostream>
+#include <thread>
 #include <vector>
 
 #include <config.hpp>
@@ -28,10 +29,21 @@ int main(int argc, char const *argv[]) {
         return -1;
     }
 
+    auto thread_id = std::this_thread::get_id();
+    auto native_handle = *reinterpret_cast<std::thread::native_handle_type*>(&thread_id);
+
     auto const n = strtol(argv[1], nullptr, 10);
 
     auto v = create_random_vector<vec_type>(n, MIN, MAX, SEED);
     int swaps;
+
+    cpu_set_t cpuset;
+    CPU_ZERO(&cpuset);
+    CPU_SET(0, &cpuset);
+    if (0 != pthread_setaffinity_np(native_handle, sizeof(cpu_set_t), &cpuset)) {
+        std::cout << "Error in thread pinning" << std::endl;
+        return EXIT_FAILURE;
+    }
 
     auto start = std::chrono::system_clock::now();
     do {

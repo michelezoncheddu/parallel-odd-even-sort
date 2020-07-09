@@ -9,11 +9,12 @@
 #include <config.hpp>
 #include <util.hpp>
 
-std::atomic<int> global_swaps = 0;
+bool finished = false;
+unsigned constexpr padding = 64 / sizeof(unsigned);
 
 template <typename T>
 int odd_even_sort(T *v, short phase, size_t end) {
-    auto swaps = 0;
+    int swaps = 0;
     for (size_t i = phase; i < end; i += 2) {
         auto first = v[i], second = v[i + 1];
         auto cond = first > second;
@@ -26,31 +27,44 @@ int odd_even_sort(T *v, short phase, size_t end) {
 }
 
 template <typename T>
-void f(unsigned thid, T *v, size_t end, int alignment, std::vector<std::unique_ptr<barrier>> &barriers) {
-    auto iter = 0;
+void f(unsigned thid, T *v, size_t end, int alignment, std::vector<std::unique_ptr<barrier>> &barriers1, std::vector<std::unique_ptr<barrier>> &barriers2, std::vector<unsigned> &swaps) {
+    int iter = 0;
+    int pos = thid * padding;
+    while (!finished) {
+        swaps[pos] |= (unsigned)odd_even_sort(v, !alignment, end);
+        barriers1[iter]->wait();
+        swaps[pos] |= (unsigned)odd_even_sort(v, alignment, end);
+        barriers2[iter++]->wait();
+    }
+}
+
+void controller_body(std::vector<std::unique_ptr<barrier>> &barriers, std::vector<unsigned> &swaps) {
+    int iter = 0;
     while (true) {
-        if (thid == 0)
-            global_swaps = 0;
-        bool odd = odd_even_sort(v, !alignment, end);
-        barriers[iter++]->wait();
-        bool even = odd_even_sort(v, alignment, end);
-        global_swaps |= (odd || even);
-        barriers[iter++]->wait();
-        if (!odd && !even && !global_swaps)
-            break;
+        unsigned tmp = 0;
+        while (!tmp && barriers[iter]->read() > 1) {
+            for (size_t i = 0; i < swaps.size(); i += padding)
+                tmp |= swaps[i];
+        }
+
+        if (!tmp) { // TODO: needed? Test performance.
+            size_t i = 0;
+            while (!tmp && i < swaps.size()) {
+                tmp |= swaps[i];
+                i += padding;
+            }
+        }
+
+        if (!tmp) {
+            finished = true;
+            barriers[iter]->dec();
+            return;
+        }
+
+        for (size_t i = 0; i < swaps.size(); i += padding)
+            swaps[i] = 0;
         barriers[iter++]->wait();
     }
-
-    /*do { // slower
-        barriers[iter++]->wait();
-        if (thid == 0)
-            global_swaps = 0;
-        odd = odd_even_sort(v, !alignment, end);
-        barriers[iter++]->wait();
-        even = odd_even_sort(v, alignment, end);
-        global_swaps |= (odd || even);
-        barriers[iter++]->wait();
-    } while (odd || even || global_swaps);*/
 }
 
 int main(int argc, char const *argv[]) {
@@ -66,30 +80,51 @@ int main(int argc, char const *argv[]) {
     auto v = create_random_vector<vec_type>(n, MIN, MAX, SEED);
     auto const ptr = v.data();
 
-    //barrier barrier(nw);
-    std::vector<std::unique_ptr<barrier>> barriers;
-    barriers.resize(n * 3);
-    for (auto &elem : barriers)
-        elem = std::make_unique<barrier>(nw);
+    auto const start_time = std::chrono::system_clock::now();
 
-    std::vector<std::unique_ptr<std::thread>> threads(nw);
+    std::vector<std::unique_ptr<barrier>> barriers1(n), barriers2(n);
+    for (auto &elem : barriers1)
+        elem = std::make_unique<barrier>(nw);
+    for (auto &elem : barriers2)
+        elem = std::make_unique<barrier>(nw + 1);
+
+    std::vector<std::unique_ptr<std::thread>> threads;
+    threads.reserve(nw);
+    std::vector<unsigned> swaps(nw * padding, 0);
 
     size_t const chunk_len = v.size() / nw;
     int remaining = static_cast<int>(v.size() % nw);
     size_t offset = 0;
 
-    auto const start_time = std::chrono::system_clock::now();
+    std::thread controller(controller_body, std::ref(barriers2), std::ref(swaps));
+
     for (unsigned i = 0; i < nw - 1; ++i) {
-        //std::cout << offset << " 1, " << chunk_len + (remaining > 0) << std::endl;
-        threads[i] = std::make_unique<std::thread>(
-                f<vec_type>, i, ptr + offset, chunk_len + (remaining > 0), offset % 2, std::ref(barriers));
+        threads.push_back(std::make_unique<std::thread>(
+                f<vec_type>, i, ptr + offset, chunk_len + (remaining > 0), offset % 2, std::ref(barriers1), std::ref(barriers2), std::ref(swaps)));
         offset += chunk_len + (remaining > 0);
         --remaining;
     }
-    //std::cout << offset << " 2, " << chunk_len - 1 << std::endl;
-    threads[threads.size() - 1] = std::make_unique<std::thread>(
-            f<vec_type>, threads.size() - 1, ptr + offset, chunk_len - 1, offset % 2, std::ref(barriers));
+    threads.push_back(std::make_unique<std::thread>(
+            f<vec_type>, nw - 1, ptr + offset, chunk_len - 1, offset % 2, std::ref(barriers1), std::ref(barriers2), std::ref(swaps)));
 
+    // Thread pinning (TODO: hw concurrency awareness)
+    cpu_set_t cpuset;
+    for (auto i = 0; i < nw; ++i) {
+        CPU_ZERO(&cpuset);
+        CPU_SET(i, &cpuset);
+        if (0 != pthread_setaffinity_np(threads[i]->native_handle(), sizeof(cpu_set_t), &cpuset)) {
+            std::cout << "Error in thread pinning" << std::endl;
+            return EXIT_FAILURE;
+        }
+    }
+    CPU_ZERO(&cpuset);
+    CPU_SET(nw, &cpuset);
+    if (0 != pthread_setaffinity_np(controller.native_handle(), sizeof(cpu_set_t), &cpuset)) {
+        std::cout << "Error in thread pinning" << std::endl;
+        return EXIT_FAILURE;
+    }
+
+    controller.join();
     for (auto &thread : threads)
         thread->join();
     auto const duration = std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -98,5 +133,6 @@ int main(int argc, char const *argv[]) {
     std::cout << duration << std::endl;
 
     assert(std::is_sorted(v.begin(), v.end()));
+
     return 0;
 }

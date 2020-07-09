@@ -80,36 +80,48 @@ int main(int argc, char const *argv[]) {
     auto v = create_random_vector<vec_type>(n, MIN, MAX, SEED);
     auto const ptr = v.data();
 
-    //barrier barrier(nw);
-    std::vector<std::unique_ptr<barrier>> barriers1, barriers2;
-    barriers1.resize(n);
-    barriers2.resize(n);
+    auto const start_time = std::chrono::system_clock::now();
+
+    std::vector<std::unique_ptr<barrier>> barriers1(n), barriers2(n);
     for (auto &elem : barriers1)
         elem = std::make_unique<barrier>(nw);
     for (auto &elem : barriers2)
         elem = std::make_unique<barrier>(nw + 1);
 
-    std::vector<std::unique_ptr<std::thread>> threads(nw);
+    std::vector<std::unique_ptr<std::thread>> threads;
+    threads.reserve(nw);
     std::vector<unsigned> swaps(nw * padding, 0);
 
     size_t const chunk_len = v.size() / nw;
     int remaining = static_cast<int>(v.size() % nw);
     size_t offset = 0;
 
-    auto const start_time = std::chrono::system_clock::now();
-
     std::thread controller(controller_body, std::ref(barriers2), std::ref(swaps));
 
     for (unsigned i = 0; i < nw - 1; ++i) {
-        //std::cout << offset << " 1, " << chunk_len + (remaining > 0) << std::endl;
-        threads[i] = std::make_unique<std::thread>(
-                f<vec_type>, i, ptr + offset, chunk_len + (remaining > 0), offset % 2, std::ref(barriers1), std::ref(barriers2), std::ref(swaps));
+        threads.push_back(std::make_unique<std::thread>(
+                f<vec_type>, i, ptr + offset, chunk_len + (remaining > 0), offset % 2, std::ref(barriers1), std::ref(barriers2), std::ref(swaps)));
         offset += chunk_len + (remaining > 0);
         --remaining;
     }
-    //std::cout << offset << " 2, " << chunk_len - 1 << std::endl;
-    threads[nw - 1] = std::make_unique<std::thread>(
-            f<vec_type>, nw - 1, ptr + offset, chunk_len - 1, offset % 2, std::ref(barriers1), std::ref(barriers2), std::ref(swaps));
+    threads.push_back(std::make_unique<std::thread>(
+            f<vec_type>, nw - 1, ptr + offset, chunk_len - 1, offset % 2, std::ref(barriers1), std::ref(barriers2), std::ref(swaps)));
+
+    cpu_set_t cpuset;
+    for (auto i = 0; i < nw; ++i) {
+        CPU_ZERO(&cpuset);
+        CPU_SET(i, &cpuset);
+        if (0 != pthread_setaffinity_np(threads[i]->native_handle(), sizeof(cpu_set_t), &cpuset)) {
+            std::cout << "Error in thread pinning" << std::endl;
+            return EXIT_FAILURE;
+        }
+    }
+    CPU_ZERO(&cpuset);
+    CPU_SET(nw, &cpuset);
+    if (0 != pthread_setaffinity_np(controller.native_handle(), sizeof(cpu_set_t), &cpuset)) {
+        std::cout << "Error in thread pinning" << std::endl;
+        return EXIT_FAILURE;
+    }
 
     controller.join();
     for (auto &thread : threads)
