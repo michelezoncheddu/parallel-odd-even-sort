@@ -29,12 +29,12 @@ unsigned odd_even_sort(T * const v, short phase, size_t end) {
 }
 
 template <typename T>
-void f(unsigned thid, T * const v, size_t end, int alignment,
+void thread_body(unsigned thid, T * const v, size_t end, int alignment,
         std::vector<std::unique_ptr<barrier>> const &barriers1,
         std::vector<std::unique_ptr<barrier>> const &barriers2,
         std::vector<unsigned> &swaps) {
     auto iter = 0;
-    auto pos = thid * padding;
+    auto const pos = thid * padding;
     while (!finished) {
         swaps[pos] |= odd_even_sort(v, !alignment, end); // Odd phase
         barriers1[iter]->wait();
@@ -44,7 +44,7 @@ void f(unsigned thid, T * const v, size_t end, int alignment,
 }
 
 void controller_body(std::vector<std::unique_ptr<barrier>> const &barriers, std::vector<unsigned> &swaps) {
-    int iter = 0;
+    auto iter = 0;
     while (true) {
         unsigned tmp = 0;
         while (!tmp && barriers[iter]->read() > 1) {
@@ -105,15 +105,15 @@ int main(int argc, char const *argv[]) {
 
     std::thread controller(controller_body, std::ref(barriers2), std::ref(swaps));
 
-    for (unsigned i = 0; i < nw - 1; ++i) {
+    for (auto i = 0; i < nw - 1; ++i) {
         threads.push_back(std::make_unique<std::thread>(
-                f<vec_type>, i, ptr + offset, chunk_len + (remaining > 0), offset % 2,
+                thread_body<vec_type>, i, ptr + offset, chunk_len + (remaining > 0), offset % 2,
                 std::ref(barriers1), std::ref(barriers2), std::ref(swaps)));
         offset += chunk_len + (remaining > 0);
         --remaining;
     }
     threads.push_back(std::make_unique<std::thread>(
-            f<vec_type>, nw - 1, ptr + offset, chunk_len - 1, offset % 2,
+            thread_body<vec_type>, nw - 1, ptr + offset, chunk_len - 1, offset % 2,
             std::ref(barriers1), std::ref(barriers2), std::ref(swaps)));
 
     // Thread pinning (works only on Linux) (TODO: hw concurrency awareness)
