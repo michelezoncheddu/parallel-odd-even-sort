@@ -9,10 +9,10 @@
 #include <config.hpp>
 #include <util.hpp>
 
-// Padding for the swap array
-unsigned constexpr padding = 64 / sizeof(unsigned); // TODO: read from input (at least)
-
 unsigned nw;
+
+// Padding for the phases and swap array
+unsigned constexpr padding = 64 / sizeof(unsigned); // TODO: read from input (at least)
 
 bool finished = false;
 
@@ -31,7 +31,7 @@ unsigned odd_even_sort(T * const v, short phase, size_t end) {
 }
 
 template <typename T>
-void thread_body(unsigned thid, T * const v, size_t end, int alignment,
+void thread_body(unsigned thid, T * const v, size_t end, short alignment,
         std::vector<unsigned> &phases,
         std::vector<unsigned> &swaps,
         std::vector<std::unique_ptr<barrier>> const &barriers) {
@@ -40,12 +40,12 @@ void thread_body(unsigned thid, T * const v, size_t end, int alignment,
     auto const has_left_neigh = thid > 0, has_right_neigh = thid < nw - 1;
     while (!finished) {
         swaps[pos] |= odd_even_sort(v, !alignment, end); // Odd phase
-        phases[thid * padding]++;
+        phases[pos]++;
         if (has_right_neigh)
-            while (phases[thid * padding] != phases[(thid + 1) * padding])
+            while (phases[pos] != phases[(thid + 1) * padding])
                 __asm__("nop");
         if (has_left_neigh)
-            while (phases[thid * padding] != phases[(thid - 1) * padding])
+            while (phases[pos] != phases[(thid - 1) * padding])
                 __asm__("nop");
         swaps[pos] |= odd_even_sort(v, alignment, end); // Even phase
         barriers[iter++]->wait();
@@ -100,11 +100,10 @@ int main(int argc, char const *argv[]) {
         elem = std::make_unique<barrier>(nw + 1); // + 1 for the controller
 
     std::vector<unsigned> phases(nw * padding, 0);
+    std::vector<unsigned> swaps(nw * padding, 0);
 
     std::vector<std::unique_ptr<std::thread>> threads;
     threads.reserve(nw);
-
-    std::vector<unsigned> swaps(nw * padding, 0);
 
     size_t const chunk_len = v.size() / nw;
     int remaining = static_cast<int>(v.size() % nw);
