@@ -36,17 +36,22 @@ void thread_body(unsigned thid, T * const v, size_t end, short alignment,
         std::vector<unsigned> &swaps,
         std::vector<std::unique_ptr<barrier>> const &barriers) {
     auto iter = 0;
-    auto const pos = thid * padding;
+    auto const pos = thid * padding; // Cache-aware position in phases and swaps array
     auto const has_left_neigh = thid > 0, has_right_neigh = thid < nw - 1;
+    
     while (!finished) {
         swaps[pos] |= odd_even_sort(v, !alignment, end); // Odd phase
-        phases[pos]++;
+        
+        phases[pos]++; // Ready for the next phase
+
+        // Wait my neighbours to be ready
         if (has_right_neigh)
             while (phases[pos] != phases[(thid + 1) * padding])
-                __asm__("nop");
+                __asm__("nop"); // To force the compiler to don't "optimize" this loop
         if (has_left_neigh)
             while (phases[pos] != phases[(thid - 1) * padding])
                 __asm__("nop");
+
         swaps[pos] |= odd_even_sort(v, alignment, end); // Even phase
         barriers[iter++]->wait();
     }
@@ -55,24 +60,29 @@ void thread_body(unsigned thid, T * const v, size_t end, short alignment,
 void controller_body(std::vector<unsigned> &swaps, std::vector<std::unique_ptr<barrier>> const &barriers) {
     auto iter = 0;
     while (true) {
-        unsigned tmp = 0;
-        while (!tmp && barriers[iter]->read() > 1) {
+        unsigned local_swaps = 0;
+
+        // While there are no swaps and some worker is still running...
+        while (!local_swaps && barriers[iter]->read() > 1) {
             for (size_t i = 0; i < swaps.size(); i += padding)
-                tmp |= swaps[i];
+                local_swaps |= swaps[i];
         }
 
+        // If there are no swaps, search again (I might have missed the last one)
         size_t i = 0;
-        while (!tmp && i < swaps.size()) {
-            tmp |= swaps[i];
+        while (!local_swaps && i < swaps.size()) {
+            local_swaps |= swaps[i];
             i += padding;
         }
 
-        if (!tmp) {
+        // No swaps, end of the computation
+        if (!local_swaps) {
             finished = true;
             barriers[iter]->dec();
             return;
         }
 
+        // Reset the swap array and go on
         for (size_t i = 0; i < swaps.size(); i += padding)
             swaps[i] = 0;
         barriers[iter++]->wait();
@@ -86,7 +96,7 @@ int main(int argc, char const *argv[]) {
         return -1;
     }
 
-    auto const n  = strtol(argv[1], nullptr, 10);
+    auto const n = strtol(argv[1], nullptr, 10); // Array length
     nw = strtol(argv[2], nullptr, 10);
 
     auto v = create_random_vector<vec_type>(n, MIN, MAX, SEED);
@@ -94,8 +104,7 @@ int main(int argc, char const *argv[]) {
 
     auto const start_time = std::chrono::system_clock::now();
 
-    // TODO: rename variables
-    std::vector<std::unique_ptr<barrier>> barriers(n); // n is an upper bound for the number of iterations
+    std::vector<std::unique_ptr<barrier>> barriers(n); // n is an upper bound of the number of iterations
     for (auto &elem : barriers)
         elem = std::make_unique<barrier>(nw + 1); // + 1 for the controller
 
@@ -122,7 +131,7 @@ int main(int argc, char const *argv[]) {
             thread_body<vec_type>, nw - 1, ptr + offset, chunk_len - 1, offset % 2,
             std::ref(phases), std::ref(swaps), std::ref(barriers)));
 
-    // Thread pinning (works only on Linux) (TODO: hw concurrency awareness)
+    // Thread pinning (works only on Linux)
     cpu_set_t cpuset;
     for (unsigned i = 0; i < nw; ++i) {
         CPU_ZERO(&cpuset);

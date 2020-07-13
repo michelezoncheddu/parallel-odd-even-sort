@@ -9,7 +9,7 @@
 #include <util.hpp>
 
 template <typename T>
-unsigned odd_even_sort(std::vector<T> &v, int start) {
+unsigned odd_even_sort(std::vector<T> &v, short start) {
     unsigned swaps = 0;
     for (size_t i = start; i < v.size() - 1; i += 2) {
         auto first = v[i], second = v[i + 1];
@@ -45,13 +45,13 @@ int main(int argc, char const *argv[]) {
         return EXIT_FAILURE;
     }
 
-    auto start = std::chrono::system_clock::now();
+    auto const start_time = std::chrono::system_clock::now();
     do {
         swaps  = odd_even_sort(v, 1); // Odd phase
         swaps += odd_even_sort(v, 0); // Even phase
     } while (swaps > 0);
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(
-            std::chrono::system_clock::now() - start).count();
+            std::chrono::system_clock::now() - start_time).count();
 
     std::cout << duration << std::endl;
 
