@@ -1,6 +1,5 @@
-#include <algorithm>
+#include <algorithm> // For is_sorted
 #include <cassert>
-#include <chrono>
 #include <iostream>
 #include <thread>
 #include <vector>

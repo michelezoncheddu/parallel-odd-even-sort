@@ -1,9 +1,10 @@
-#include <algorithm>
-#include <atomic>
-#include <chrono>
+#include <algorithm> // For is_sorted
 #include <cassert>
+#include <functional> // For ref and cref
 #include <iostream>
+#include <memory> // For smart pointers
 #include <thread>
+#include <vector>
 
 #include <barrier.hpp>
 #include <config.hpp>
@@ -59,7 +60,7 @@ void thread_body(unsigned thid, T * const v, size_t end, short alignment,
     }
 }
 
-void controller_body(std::vector<unsigned> &swaps, std::vector<std::unique_ptr<barrier>> const &barriers) {
+void controller_body(std::vector<unsigned> const &swaps, std::vector<std::unique_ptr<barrier>> const &barriers) {
     auto iter = 0;
     while (true) {
         unsigned local_swaps = 0;
@@ -117,18 +118,18 @@ int main(int argc, char const *argv[]) {
     int remaining = static_cast<int>(v.size() % nw);
     size_t offset = 0;
 
-    std::thread controller(controller_body, std::ref(swaps), std::ref(barriers));
+    std::thread controller(controller_body, std::cref(swaps), std::cref(barriers));
 
     for (unsigned i = 0; i < nw - 1; ++i) {
         threads.push_back(std::make_unique<std::thread>(
                 thread_body<vec_type>, i, ptr + offset, chunk_len + (remaining > 0), offset % 2,
-                std::ref(phases), std::ref(swaps), std::ref(barriers)));
+                std::ref(phases), std::ref(swaps), std::cref(barriers)));
         offset += chunk_len + (remaining > 0);
         --remaining;
     }
     threads.push_back(std::make_unique<std::thread>(
             thread_body<vec_type>, nw - 1, ptr + offset, chunk_len - 1, offset % 2,
-            std::ref(phases), std::ref(swaps), std::ref(barriers)));
+            std::ref(phases), std::ref(swaps), std::cref(barriers)));
 
     // Thread pinning (works only on Linux)
     cpu_set_t cpuset;
