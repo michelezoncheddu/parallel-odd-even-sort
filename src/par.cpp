@@ -53,7 +53,9 @@ void thread_body(unsigned thid, T * const v, size_t end, short alignment,
                 __asm__("nop");
 
         swaps[pos] |= odd_even_sort(v, alignment, end); // Even phase
+
         barriers[iter++]->wait();
+        swaps[pos] = 0;
     }
 }
 
@@ -82,9 +84,6 @@ void controller_body(std::vector<unsigned> &swaps, std::vector<std::unique_ptr<b
             return;
         }
 
-        // Reset the swap array and go on
-        for (size_t i = 0; i < swaps.size(); i += padding)
-            swaps[i] = 0;
         barriers[iter++]->wait();
     }
 }
