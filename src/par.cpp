@@ -18,9 +18,9 @@ unsigned constexpr padding = 64 / sizeof(unsigned); // TODO: read from input (at
 bool finished = false;
 
 template <typename T>
-unsigned odd_even_sort(T * const v, short phase, size_t end) {
+unsigned odd_even_sort(T * const v, short start, size_t end) {
     unsigned swaps = 0;
-    for (size_t i = phase; i < end; i += 2) {
+    for (size_t i = start; i < end; i += 2) {
         auto first = v[i], second = v[i + 1];
         auto cond = first > second;
         v[i] = cond ? second : first;

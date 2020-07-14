@@ -1,8 +1,9 @@
-#include <algorithm>
-#include <atomic>
-#include <chrono>
+#include <algorithm> // For is_sorted
 #include <cassert>
 #include <iostream>
+#include <memory> // For smart pointers
+#include <thread>
+#include <vector>
 
 #include <config.hpp>
 #include <util.hpp>
@@ -26,6 +27,27 @@ unsigned odd_even_sort(T * const v, short phase, size_t end) {
     return swaps;
 }
 
+struct Emitter : ff_monode_t<int> {
+    Emitter(std::vector<vec_type> &v, unsigned nw) : v{v}, nw{nw} {}
+    ~Emitter() override = default;
+
+    int* svc(int *task) override {
+        std::cout << v.size() << std::endl;
+    }
+
+    std::vector<vec_type> &v;
+    unsigned const nw;
+};
+
+struct Worker : ff_node_t<int> {
+    Worker() {}
+    ~Worker() override = default;
+
+    int* svc(int *task) override {
+        return nullptr;
+    }
+};
+
 int main(int argc, char const *argv[]) {
     if (argc < 3) {
         std::cout << "Usage is " << argv[0]
@@ -37,9 +59,23 @@ int main(int argc, char const *argv[]) {
     auto const nw = strtol(argv[2], nullptr, 10);
 
     auto v = create_random_vector<vec_type>(n, MIN, MAX, SEED);
-    auto const ptr = v.data();
 
     auto const start_time = std::chrono::system_clock::now();
+
+    Emitter emitter(v, nw);
+    ff_Farm<> farm([&]() {
+           std::vector<std::unique_ptr<ff_node>> workers(nw);
+           for (auto &elem : workers)
+               elem = make_unique<Worker>();
+           return workers;
+        } (),
+        emitter);
+    farm.remove_collector();
+    farm.wrap_around();
+    if (farm.run_and_wait_end() < 0) {
+        error("running farm");
+        return EXIT_FAILURE;
+    }
 
 //    size_t const chunk_len = v.size() / nw;
 //    int remaining = static_cast<int>(v.size() % nw);
