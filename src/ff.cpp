@@ -12,10 +12,6 @@
 
 using namespace ff;
 
-auto const padding = cache_line_size() / sizeof(unsigned);
-
-unsigned nw;
-
 template <typename T>
 unsigned odd_even_sort(T * const v, short phase, size_t end) {
     unsigned swaps = 0;
@@ -30,93 +26,101 @@ unsigned odd_even_sort(T * const v, short phase, size_t end) {
     return swaps;
 }
 
-struct Emitter : ff_monode_t<std::pair<unsigned, unsigned>, unsigned> {
-    Emitter() {
-        remaining = nw;
+struct Emitter : ff_monode_t<unsigned> {
+    explicit Emitter(unsigned nw) : nw{nw}, remaining{nw} {
+        ready_for = std::vector<unsigned>(nw, 0);
+        is_running = std::vector<unsigned>(nw, 0);
     }
     ~Emitter() override = default;
 
-    unsigned* svc(std::pair<unsigned, unsigned> *task) override {
+    [[nodiscard]] bool are_neighbors_ready(unsigned i) const {
+        auto const has_left_neigh = i > 0, has_right_neigh = i < nw - 1;
+        auto res = true;
+        if (has_right_neigh)
+            res &= (ready_for[i] == ready_for[i + 1]);
+        if (has_left_neigh)
+            res &= (ready_for[i] == ready_for[i - 1]);
+        return res;
+    }
+
+    unsigned* svc(unsigned *task) override {
         // Initial phase
         if (task == nullptr) {
             broadcast_task(&RUN);
             return GO_ON;
         }
 
+        std::cout << get_channel_id() << " - ";
+        for (auto x : ready_for)
+            std::cout << x << " ";
+        std::cout << "- ";
+        for (auto x : is_running)
+            std::cout << x << " ";
+        std::cout << std::endl;
+
         // task from feedback
 
-//        if (task->second != iteration)
-//            return GO_ON;
+        auto const worker = get_channel_id();
+        ready_for[worker]++;
 
-        if (!swaps)
-            swaps |= task->first;
+        if (ready_for[worker] == iter + 1) { // Ready for the next iteration
+            --remaining;
+            if (!swaps)
+                swaps |= *task;
+        }
 
-//        if (swaps) {
-//            broadcast_task(&RUN);
-//            swaps = 0;
-//            remaining = nw;
-//            iteration++;
-//            return GO_ON;
-//        }
+        if (!remaining && !swaps)
+            return EOS;
 
-        if (--remaining == 0) {
-            if (!swaps) {
-                return EOS;
-            } else {
-                broadcast_task(&RUN);
-                swaps = 0;
-                remaining = nw;
-                iteration++;
+        if (!remaining) {
+            broadcast_task(&RUN);
+            for (auto &elem : is_running)
+                elem++;
+            ++iter;
+            swaps = 0;
+            remaining = nw;
+            return GO_ON;
+        }
+
+        // Unlock workers
+        for (unsigned i = 0; i < nw; ++i) {
+            if (ready_for[i] != is_running[i] && are_neighbors_ready(i)) {
+                ff_send_out_to(&RUN, i);
+                is_running[i]++;
+                if (is_running[i] > iter) {
+                    iter = is_running[i];
+                    swaps = 0;
+                    remaining = nw;
+                }
             }
         }
         return GO_ON;
     }
 
+    unsigned const nw;
     unsigned remaining;
+    std::vector<unsigned> ready_for, is_running;
 
-    unsigned swaps = 0;
-    unsigned iteration = 1;
+    unsigned iter  = 0; // Current higher iteration
+    unsigned swaps = 0; // Number of swaps of the current higher iteration
 
     unsigned RUN = 1; // Dummy task
 };
 
-struct Worker : ff_node_t<unsigned, std::pair<unsigned, unsigned>> {
-    Worker(unsigned thid, vec_type * const v, size_t end, short alignment, std::vector<unsigned> &phases)
-        : thid{thid}, v{v}, end{end}, alignment{alignment}, phases{phases} {
-        pos = thid * padding;
-        has_left_neigh = thid > 0;
-        has_right_neigh = thid < nw - 1;
-    }
+struct Worker : ff_node_t<unsigned> {
+    Worker(vec_type * const v, size_t end, short alignment) : v{v}, end{end}, alignment{alignment} {}
 
-    std::pair<unsigned, unsigned>* svc(unsigned *) override {
-        swaps.first = odd_even_sort(v, !alignment, end);
-
-        phases[pos]++; // Ready for the next phase
-
-        // Wait my neighbours to be ready
-        if (has_right_neigh)
-            while (phases[pos] != phases[(thid + 1) * padding])
-                __asm__("nop"); // To force the compiler to don't "optimize" this loop
-        if (has_left_neigh)
-            while (phases[pos] != phases[(thid - 1) * padding])
-                __asm__("nop");
-
-        swaps.first |= odd_even_sort(v, alignment, end);
-
-        swaps.second++;
-
+    unsigned* svc(unsigned *) override {
+        swaps = odd_even_sort(v, alignment, end);
+        alignment = !alignment;
         return &swaps;
     }
 
-    unsigned thid;
     vec_type * const v;
     size_t end;
     short alignment;
-    std::vector<unsigned> &phases;
-    unsigned pos;
-    bool has_left_neigh, has_right_neigh;
 
-    std::pair<unsigned, unsigned> swaps{0, 0};
+    unsigned swaps = 0;
 };
 
 int main(int argc, char const *argv[]) {
@@ -126,16 +130,14 @@ int main(int argc, char const *argv[]) {
         return -1;
     }
 
-    auto const n = strtol(argv[1], nullptr, 10); // Array length
-    nw = strtol(argv[2], nullptr, 10);
+    auto const n  = strtol(argv[1], nullptr, 10); // Array length
+    auto const nw = strtol(argv[2], nullptr, 10);
 
     auto v = create_random_vector<vec_type>(n, MIN, MAX, SEED);
 
     ffTime(START_TIME);
 
-    std::vector<unsigned> phases(nw * padding, 0);
-
-    Emitter emitter;
+    Emitter emitter(nw);
     ff_Farm<> farm([&]() {
                    std::vector<std::unique_ptr<ff_node>> workers;
                    auto const ptr = v.data();
@@ -145,12 +147,12 @@ int main(int argc, char const *argv[]) {
 
                    for (unsigned i = 0; i < nw - 1; ++i) {
                       workers.push_back(make_unique<Worker>(
-                              i, ptr + offset, chunk_len + (remaining > 0), offset % 2, phases));
+                              ptr + offset, chunk_len + (remaining > 0), offset % 2));
                       offset += chunk_len + (remaining > 0);
                       --remaining;
                    }
                    workers.push_back(make_unique<Worker>(
-                          nw - 1, ptr + offset, chunk_len - 1, offset % 2, phases));
+                          ptr + offset, chunk_len - 1, offset % 2));
                    return workers;
                } (),
                emitter);
