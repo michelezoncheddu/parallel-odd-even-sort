@@ -2,7 +2,6 @@
 #include <cassert>
 #include <iostream>
 #include <memory> // For smart pointers
-#include <thread>
 #include <vector>
 
 #include <config.hpp>
@@ -27,25 +26,56 @@ unsigned odd_even_sort(T * const v, short phase, size_t end) {
     return swaps;
 }
 
-struct Emitter : ff_monode_t<int> {
-    Emitter(std::vector<vec_type> &v, unsigned nw) : v{v}, nw{nw} {}
+struct Emitter : ff_monode_t<unsigned> {
+    explicit Emitter(unsigned nw) : nw{nw} {
+        remaining = nw;
+    }
     ~Emitter() override = default;
 
-    int* svc(int *task) override {
-        std::cout << v.size() << std::endl;
+    unsigned* svc(unsigned *task) override {
+        if (task == nullptr) {
+            broadcast_task(&RUN);
+            return GO_ON;
+        }
+
+        // task from feedback
+        swaps += *task;
+
+        if (--remaining == 0) {
+            if (!swaps) {
+                return EOS;
+            } else {
+                broadcast_task(&RUN);
+                swaps = 0;
+                remaining = nw;
+                return GO_ON;
+            }
+        } else {
+            return GO_ON;
+        }
     }
 
-    std::vector<vec_type> &v;
     unsigned const nw;
+    unsigned remaining;
+
+    unsigned swaps = 0;
+
+    int RUN = 1;
 };
 
-struct Worker : ff_node_t<int> {
-    Worker() {}
-    ~Worker() override = default;
+struct Worker : ff_node_t<unsigned> {
+    Worker(vec_type * const v, size_t end, short alignment) : v{v}, end{end}, alignment{alignment} {}
 
-    int* svc(int *task) override {
-        return nullptr;
+    unsigned* svc(unsigned *) override {
+        swaps = odd_even_sort(v, alignment, end);
+        alignment = !alignment;
+        return &swaps;
     }
+
+    vec_type * const v;
+    size_t end;
+    short alignment;
+    unsigned swaps = 0;
 };
 
 int main(int argc, char const *argv[]) {
@@ -60,42 +90,35 @@ int main(int argc, char const *argv[]) {
 
     auto v = create_random_vector<vec_type>(n, MIN, MAX, SEED);
 
-    auto const start_time = std::chrono::system_clock::now();
-
-    Emitter emitter(v, nw);
+    ffTime(START_TIME);
+    Emitter emitter(nw);
     ff_Farm<> farm([&]() {
-           std::vector<std::unique_ptr<ff_node>> workers(nw);
-           for (auto &elem : workers)
-               elem = make_unique<Worker>();
-           return workers;
-        } (),
-        emitter);
+                   std::vector<std::unique_ptr<ff_node>> workers;
+                   auto const ptr = v.data();
+                   size_t const chunk_len = v.size() / nw;
+                   int remaining = static_cast<int>(v.size() % nw);
+                   size_t offset = 0;
+
+                   for (unsigned i = 0; i < nw - 1; ++i) {
+                      workers.push_back(make_unique<Worker>(
+                              ptr + offset, chunk_len + (remaining > 0), offset % 2));
+                      offset += chunk_len + (remaining > 0);
+                      --remaining;
+                   }
+                   workers.push_back(make_unique<Worker>(
+                          ptr + offset, chunk_len - 1, offset % 2));
+                   return workers;
+               } (),
+               emitter);
     farm.remove_collector();
     farm.wrap_around();
     if (farm.run_and_wait_end() < 0) {
         error("running farm");
         return EXIT_FAILURE;
     }
+    ffTime(STOP_TIME);
 
-//    size_t const chunk_len = v.size() / nw;
-//    int remaining = static_cast<int>(v.size() % nw);
-//    size_t offset = 0;
-//
-//    for (unsigned i = 0; i < nw - 1; ++i) {
-//        threads.push_back(std::make_unique<std::thread>(
-//                thread_body<vec_type>, i, ptr + offset, chunk_len + (remaining > 0), offset % 2,
-//                std::ref(phases), std::ref(swaps), std::ref(barriers)));
-//        offset += chunk_len + (remaining > 0);
-//        --remaining;
-//    }
-//    threads.push_back(std::make_unique<std::thread>(
-//            thread_body<vec_type>, nw - 1, ptr + offset, chunk_len - 1, offset % 2,
-//            std::ref(phases), std::ref(swaps), std::ref(barriers)));
-
-    auto const duration = std::chrono::duration_cast<std::chrono::milliseconds>(
-            std::chrono::system_clock::now() - start_time).count();
-
-    std::cout << duration << std::endl;
+    std::cout << "Time: " << ffTime(GET_TIME) << " (ms)" << std::endl;
 
     assert(std::is_sorted(v.begin(), v.end()));
 
