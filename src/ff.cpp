@@ -49,17 +49,10 @@ struct Emitter : ff_monode_t<unsigned> {
             return GO_ON;
         }
 
-//        std::cout << get_channel_id() << " - ";
-//        for (auto x : phase)
-//            std::cout << x << " ";
-//        std::cout << std::endl;
-
         /*
          * Phase 0: running odd phase
          * Phase 1: ready for even phase
          * Phase 2: running even phase
-         *
-         * Phase 3: finished even phase (useful?)
          */
 
         // task from feedback
@@ -67,28 +60,26 @@ struct Emitter : ff_monode_t<unsigned> {
         auto const worker = get_channel_id();
 
         if (!swaps)
-            swaps |= *task;
+            swaps = *task;
 
         // Phase can only be 0 or 2
 
         if (phase[worker] == 2) { // The worker has finished
-            phase[worker]++;
             --remaining;
             if (!remaining) {
-                if (!swaps) {
+                if (!swaps)
                     return EOS;
-                } else {
-                    broadcast_task(&RUN);
-                    swaps = 0;
-                    remaining = nw;
-                    for (auto &elem : phase)
-                        elem = 0;
-                }
+                broadcast_task(&RUN);
+                swaps = 0;
+                remaining = nw;
+                for (auto &elem : phase)
+                    elem = 0;
             }
             return GO_ON;
         }
 
-        // Phase was 0
+        // Phase is 0
+        // Unlock workers
         phase[worker]++;
         for (unsigned i = 0; i < nw; ++i) {
             if (phase[i] == 1 && are_neighbors_ready(i)) {
