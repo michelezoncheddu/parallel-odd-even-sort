@@ -33,9 +33,10 @@ CXXFLAGS	= #-g -DTRACE_FASTFLOW -DNO_DEFAULT_MAPPING -DBLOCKING_MODE -DFF_BOUNDE
 LDFLAGS 	= -pthread
 OPTFLAGS	= -O3 #-DNDEBUG #-fopt-info-vec -fopt-info-vec-missed
 
-TARGETS 	= seq	\
-              par	\
-              ff
+TARGETS 	= seq		\
+              par		\
+              ff_async	\
+              ff_naive
 
 .PHONY: all clean cleanall
 .SUFFIXES: .cpp
