@@ -28,24 +28,19 @@ unsigned odd_even_sort(T * const v, short phase, size_t end) {
 
 struct Emitter : ff_monode_t<unsigned> {
     explicit Emitter(unsigned nw) : nw{nw} {
-        remaining = nw;
+        remaining = 1; // The task that starts the emitter
     }
-    ~Emitter() override = default;
 
     unsigned* svc(unsigned *task) override {
-        if (task == nullptr) {
-            broadcast_task(&RUN);
-            return GO_ON;
-        }
-
-        // task from feedback
+        // task always from feedback
         if (!swaps)
             swaps = *task;
 
         if (--remaining == 0) {
-            if (!swaps)
+            if (previous_zero && !swaps) // Zero swaps also in the previous phase, stop
                 return EOS;
-            broadcast_task(&RUN);
+            broadcast_task(&dummy_task);
+            previous_zero = swaps == 0;
             swaps = 0;
             remaining = nw;
         }
@@ -55,9 +50,10 @@ struct Emitter : ff_monode_t<unsigned> {
     unsigned const nw;
     unsigned remaining;
 
-    unsigned swaps = 0;
+    unsigned swaps = 1;
+    bool previous_zero = false;
 
-    int RUN = 1;
+    unsigned dummy_task = 0;
 };
 
 struct Worker : ff_node_t<unsigned> {
@@ -72,6 +68,7 @@ struct Worker : ff_node_t<unsigned> {
     vec_type * const v;
     size_t end;
     short alignment;
+
     unsigned swaps = 0;
 };
 
@@ -90,23 +87,23 @@ int main(int argc, char const *argv[]) {
     ffTime(START_TIME);
     Emitter emitter(nw);
     ff_Farm<> farm([&]() {
-                       std::vector<std::unique_ptr<ff_node>> workers;
-                       auto const ptr = v.data();
-                       size_t const chunk_len = v.size() / nw;
-                       int remaining = static_cast<int>(v.size() % nw);
-                       size_t offset = 0;
+                   std::vector<std::unique_ptr<ff_node>> workers;
+                   auto const ptr = v.data();
+                   size_t const chunk_len = v.size() / nw;
+                   int remaining = static_cast<int>(v.size() % nw);
+                   size_t offset = 0;
 
-                       for (unsigned i = 0; i < nw - 1; ++i) {
-                           workers.push_back(make_unique<Worker>(
-                                   ptr + offset, chunk_len + (remaining > 0), offset % 2));
-                           offset += chunk_len + (remaining > 0);
-                           --remaining;
-                       }
+                   for (unsigned i = 0; i < nw - 1; ++i) {
                        workers.push_back(make_unique<Worker>(
-                               ptr + offset, chunk_len - 1, offset % 2));
-                       return workers;
-                   } (),
-                   emitter);
+                               ptr + offset, chunk_len + (remaining > 0), offset % 2));
+                       offset += chunk_len + (remaining > 0);
+                       --remaining;
+                   }
+                   workers.push_back(make_unique<Worker>(
+                           ptr + offset, chunk_len - 1, offset % 2));
+                   return workers;
+               } (),
+               emitter);
     farm.remove_collector();
     farm.wrap_around();
     if (farm.run_and_wait_end() < 0) {
