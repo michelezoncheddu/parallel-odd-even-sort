@@ -28,8 +28,7 @@ unsigned odd_even_sort(T * const v, short phase, size_t end) {
 
 struct Emitter : ff_monode_t<unsigned> {
     explicit Emitter(unsigned nw) : nw{nw}, remaining{nw} {
-        ready_for = std::vector<unsigned>(nw, 0);
-        is_running = std::vector<unsigned>(nw, 0);
+        phase = std::vector<short>(nw, 0);
     }
     ~Emitter() override = default;
 
@@ -37,9 +36,9 @@ struct Emitter : ff_monode_t<unsigned> {
         auto const has_left_neigh = i > 0, has_right_neigh = i < nw - 1;
         auto res = true;
         if (has_right_neigh)
-            res &= (ready_for[i] == ready_for[i + 1]);
+            res &= (phase[i] <= phase[i + 1]);
         if (has_left_neigh)
-            res &= (ready_for[i] == ready_for[i - 1]);
+            res &= (phase[i] <= phase[i - 1]);
         return res;
     }
 
@@ -50,48 +49,51 @@ struct Emitter : ff_monode_t<unsigned> {
             return GO_ON;
         }
 
-        std::cout << get_channel_id() << " - ";
-        for (auto x : ready_for)
-            std::cout << x << " ";
-        std::cout << "- ";
-        for (auto x : is_running)
-            std::cout << x << " ";
-        std::cout << std::endl;
+//        std::cout << get_channel_id() << " - ";
+//        for (auto x : phase)
+//            std::cout << x << " ";
+//        std::cout << std::endl;
+
+        /*
+         * Phase 0: running odd phase
+         * Phase 1: ready for even phase
+         * Phase 2: running even phase
+         *
+         * Phase 3: finished even phase (useful?)
+         */
 
         // task from feedback
 
         auto const worker = get_channel_id();
-        ready_for[worker]++;
 
-        if (ready_for[worker] == iter + 1) { // Ready for the next iteration
+        if (!swaps)
+            swaps |= *task;
+
+        // Phase can only be 0 or 2
+
+        if (phase[worker] == 2) { // The worker has finished
+            phase[worker]++;
             --remaining;
-            if (!swaps)
-                swaps |= *task;
-        }
-
-        if (!remaining && !swaps)
-            return EOS;
-
-        if (!remaining) {
-            broadcast_task(&RUN);
-            for (auto &elem : is_running)
-                elem++;
-            ++iter;
-            swaps = 0;
-            remaining = nw;
+            if (!remaining) {
+                if (!swaps) {
+                    return EOS;
+                } else {
+                    broadcast_task(&RUN);
+                    swaps = 0;
+                    remaining = nw;
+                    for (auto &elem : phase)
+                        elem = 0;
+                }
+            }
             return GO_ON;
         }
 
-        // Unlock workers
+        // Phase was 0
+        phase[worker]++;
         for (unsigned i = 0; i < nw; ++i) {
-            if (ready_for[i] != is_running[i] && are_neighbors_ready(i)) {
+            if (phase[i] == 1 && are_neighbors_ready(i)) {
                 ff_send_out_to(&RUN, i);
-                is_running[i]++;
-                if (is_running[i] > iter) {
-                    iter = is_running[i];
-                    swaps = 0;
-                    remaining = nw;
-                }
+                phase[i]++;
             }
         }
         return GO_ON;
@@ -99,9 +101,8 @@ struct Emitter : ff_monode_t<unsigned> {
 
     unsigned const nw;
     unsigned remaining;
-    std::vector<unsigned> ready_for, is_running;
+    std::vector<short> phase;
 
-    unsigned iter  = 0; // Current higher iteration
     unsigned swaps = 0; // Number of swaps of the current higher iteration
 
     unsigned RUN = 1; // Dummy task
