@@ -27,11 +27,14 @@ unsigned odd_even_sort(T * const v, short phase, size_t end) {
 }
 
 struct Emitter : ff_monode_t<unsigned> {
-    explicit Emitter(unsigned nw) : nw{nw} {
-        remaining = 1; // The task that starts the emitter
-    }
+    explicit Emitter(unsigned nw) : nw{nw} {}
 
     unsigned* svc(unsigned *task) override {
+        static unsigned remaining = 1; // The task that starts the emitter
+        static unsigned swaps = 1;
+        static unsigned dummy_task = 0;
+        static bool previous_zero = false;
+
         // task always from feedback
         if (!swaps)
             swaps = *task;
@@ -48,12 +51,6 @@ struct Emitter : ff_monode_t<unsigned> {
     }
 
     unsigned const nw;
-    unsigned remaining;
-
-    unsigned swaps = 1;
-    bool previous_zero = false;
-
-    unsigned dummy_task = 0;
 };
 
 struct Worker : ff_node_t<unsigned> {
