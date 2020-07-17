@@ -83,7 +83,7 @@ void Barrier::wait()
             // Synchronize and store in one operation.
             passed.store(passed_old + 1, std::memory_order_release);
         } else {
-            // Not the last thread. Wait others.
+            // Not the last thread. Wait other_versions.
             while (passed.load(std::memory_order_relaxed) == passed_old) {};
             // Need to synchronize cache with other threads, passed barrier.
             std::atomic_thread_fence(std::memory_order_acquire);

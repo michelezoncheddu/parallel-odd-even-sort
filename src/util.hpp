@@ -1,7 +1,14 @@
+/**
+ * @file   util.hpp
+ * @brief  It implements some utility functions
+ * @author Michele Zoncheddu
+ */
+
+
 #ifndef ODD_EVEN_SORT_UTIL_HPP
 #define ODD_EVEN_SORT_UTIL_HPP
 
-#include <algorithm>
+#include <algorithm> // std::generate
 #include <random>
 #include <vector>
 
@@ -13,7 +20,8 @@ std::vector<T> create_random_vector(size_t n, int min, int max, unsigned seed) {
     std::uniform_int_distribution<> dis(min, max);
 
     std::vector<T> v(n);
-    generate(begin(v), end(v), [&]{ return dis(gen); });
+    std::generate(v.begin(), v.end(), [&]{ return dis(gen); });
+
     return v;
 }
 

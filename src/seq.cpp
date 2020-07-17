@@ -1,4 +1,11 @@
-#include <algorithm> // For is_sorted
+/**
+ * @file   seq.cpp
+ * @brief  Sequential implementation of the odd-even sort algorithm
+ * @author Michele Zoncheddu
+ */
+
+
+#include <algorithm> // std::is_sorted
 #include <cassert>
 #include <iostream>
 #include <thread>
@@ -7,6 +14,14 @@
 #include <config.hpp>
 #include <util.hpp>
 
+/**
+ * @brief It performs an odd or an even sorting phase on the array
+ *
+ * @tparam T the vector type
+ * @param v the vector
+ * @param start the phase (0: even, 1: odd)
+ * @return the number of swaps
+ */
 template <typename T>
 unsigned odd_even_sort(std::vector<T> &v, short start) {
     unsigned swaps = 0;
@@ -21,6 +36,11 @@ unsigned odd_even_sort(std::vector<T> &v, short start) {
     return swaps;
 }
 
+/**
+ * @brief the starting method
+ *
+ * @return the exit status
+ */
 int main(int argc, char const *argv[]) {
     if (argc < 2) {
         std::cout << "Usage is " << argv[0]
@@ -33,7 +53,7 @@ int main(int argc, char const *argv[]) {
     auto v = create_random_vector<vec_type>(n, MIN, MAX, SEED);
     unsigned swaps;
 
-    // Dirty trick for get the current thread handle
+    // Dirty trick for getting the current thread handle
     auto thread_id = std::this_thread::get_id();
     auto native_handle = *reinterpret_cast<std::thread::native_handle_type*>(&thread_id);
     cpu_set_t cpuset;

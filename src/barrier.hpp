@@ -1,3 +1,10 @@
+/**
+ * @file   barrier.hpp
+ * @brief  It describes an atomic barrier for threads synchronization
+ * @author Michele Zoncheddu
+ */
+
+
 #ifndef ODD_EVEN_SORT_BARRIER_HPP
 #define ODD_EVEN_SORT_BARRIER_HPP
 
@@ -8,13 +15,11 @@ private:
     std::atomic<int> n;
 
 public:
-    explicit barrier(int n);
+    explicit barrier(int);
 
-    void set_t(int in);
+    void set(int);
 
     void dec();
-
-    void stop();
 
     void wait();
 

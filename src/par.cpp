@@ -1,8 +1,15 @@
-#include <algorithm> // For is_sorted
+/**
+ * @file   par.cpp
+ * @brief  STD parallel implementation of the odd-even sort algorithm
+ * @author Michele Zoncheddu
+ */
+
+
+#include <algorithm>  // std::is_sorted
 #include <cassert>
-#include <functional> // For ref and cref
+#include <functional> // std::ref, std::cref
 #include <iostream>
-#include <memory> // For smart pointers
+#include <memory>     // Smart pointers
 #include <thread>
 #include <vector>
 
@@ -17,6 +24,15 @@ unsigned constexpr padding = 64 / sizeof(unsigned); // TODO: read from input (at
 
 bool finished = false;
 
+/**
+ * @brief It performs an odd or an even sorting phase on the array
+ *
+ * @tparam T the vector pointer type
+ * @param v the pointer to the vector
+ * @param start the phase
+ * @param end the end of the array
+ * @return the number of swaps
+ */
 template <typename T>
 unsigned odd_even_sort(T * const v, short start, size_t end) {
     unsigned swaps = 0;
@@ -60,6 +76,12 @@ void thread_body(unsigned thid, T * const v, size_t end, short alignment,
     }
 }
 
+/**
+ * @brief
+ *
+ * @param swaps
+ * @param barriers
+ */
 void controller_body(std::vector<unsigned> const &swaps, std::vector<std::unique_ptr<barrier>> const &barriers) {
     auto iter = 0;
     while (true) {
@@ -89,6 +111,11 @@ void controller_body(std::vector<unsigned> const &swaps, std::vector<std::unique
     }
 }
 
+/**
+ * @brief the starting method
+ *
+ * @return the exit status
+ */
 int main(int argc, char const *argv[]) {
     if (argc < 3) {
         std::cout << "Usage is " << argv[0]

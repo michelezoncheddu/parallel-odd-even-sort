@@ -35,8 +35,8 @@ OPTFLAGS	= -O3 #-DNDEBUG #-fopt-info-vec -fopt-info-vec-missed
 
 TARGETS 	= seq		\
               par		\
-              ff_async	\
-              ff_naive
+              ff		\
+              ff_async
 
 .PHONY: all clean cleanall
 .SUFFIXES: .cpp

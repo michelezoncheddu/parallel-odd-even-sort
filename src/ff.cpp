@@ -1,7 +1,14 @@
-#include <algorithm> // For is_sorted
+/**
+ * @file   ff.cpp
+ * @brief  FastFlow parallel implementation of the odd-even sort algorithm
+ * @author Michele Zoncheddu
+ */
+
+
+#include <algorithm> // std::is_sorted
 #include <cassert>
 #include <iostream>
-#include <memory> // For smart pointers
+#include <memory>    // Smart pointers
 #include <vector>
 
 #include <config.hpp>
@@ -12,6 +19,15 @@
 
 using namespace ff;
 
+/**
+ * @brief It performs an odd or an even sorting phase on the array
+ *
+ * @tparam T the vector pointer type
+ * @param v the pointer to the vector
+ * @param start the phase
+ * @param end the end of the array
+ * @return the number of swaps
+ */
 template <typename T>
 unsigned odd_even_sort(T * const v, short phase, size_t end) {
     unsigned swaps = 0;
@@ -58,8 +74,19 @@ struct Worker : ff_node_t<unsigned> {
 
     unsigned* svc(unsigned *) override {
         swaps = odd_even_sort(v, alignment, end);
-        alignment = !alignment;
+
+        alignment = !alignment; // Change phase
+
+        /**
+         * I can send my local variable because it goes only to the emitter,
+         * and the next svc call of this worker will happen only after that the emitter read the value.
+         */
         return &swaps;
+
+        // TODO: try
+        // sendout
+        // alignment
+        // goon
     }
 
     vec_type * const v;
@@ -69,6 +96,11 @@ struct Worker : ff_node_t<unsigned> {
     unsigned swaps = 0;
 };
 
+/**
+ * @brief the starting method
+ *
+ * @return the exit status
+ */
 int main(int argc, char const *argv[]) {
     if (argc < 3) {
         std::cout << "Usage is " << argv[0]
