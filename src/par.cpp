@@ -1,6 +1,6 @@
 /**
  * @file   par.cpp
- * @brief  STD parallel implementation of the odd-even sort algorithm
+ * @brief  STD thread parallel implementation of the odd-even sort algorithm
  * @author Michele Zoncheddu
  */
 
@@ -17,7 +17,7 @@
 #include <config.hpp>
 #include <util.hpp>
 
-unsigned nw;
+int nw;
 
 // Padding for the phases and swap array
 unsigned constexpr padding = 64 / sizeof(unsigned); // TODO: read from input (at least)
@@ -48,14 +48,14 @@ unsigned odd_even_sort(T * const v, short start, size_t end) {
 }
 
 template <typename T>
-void thread_body(unsigned thid, T * const v, size_t end, short alignment,
+void thread_body(int thid, T * const v, size_t end, short alignment,
         std::vector<unsigned> &phases,
         std::vector<unsigned> &swaps,
         std::vector<std::unique_ptr<barrier>> const &barriers) {
     auto iter = 0;
     auto const pos = thid * padding; // Cache-aware position in phases and swaps array
     auto const has_left_neigh = thid > 0, has_right_neigh = thid < nw - 1;
-    
+
     while (!finished) {
         swaps[pos] |= odd_even_sort(v, !alignment, end); // Odd phase
         
@@ -124,7 +124,13 @@ int main(int argc, char const *argv[]) {
     }
 
     auto const n = strtol(argv[1], nullptr, 10); // Array length
-    nw = strtol(argv[2], nullptr, 10);
+    nw = static_cast<int>(strtol(argv[2], nullptr, 10));
+
+    if (n < 1 || nw < 1)
+        return EXIT_FAILURE;
+
+    if (n < nw)
+        return EXIT_FAILURE;
 
     auto v = create_random_vector<vec_type>(n, MIN, MAX, SEED);
     auto const ptr = v.data();
@@ -142,12 +148,12 @@ int main(int argc, char const *argv[]) {
     threads.reserve(nw);
 
     size_t const chunk_len = v.size() / nw;
-    int remaining = static_cast<int>(v.size() % nw);
+    long remaining = static_cast<long>(v.size() % nw);
     size_t offset = 0;
 
     std::thread controller(controller_body, std::cref(swaps), std::cref(barriers));
 
-    for (unsigned i = 0; i < nw - 1; ++i) {
+    for (int i = 0; i < nw - 1; ++i) {
         threads.push_back(std::make_unique<std::thread>(
                 thread_body<vec_type>, i, ptr + offset, chunk_len + (remaining > 0), offset % 2,
                 std::ref(phases), std::ref(swaps), std::cref(barriers)));

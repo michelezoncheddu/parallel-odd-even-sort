@@ -28,15 +28,14 @@ FF_ROOT = /usr/local/include/fastflow
 
 CXX			= g++-9 -std=c++17 -Wall
 INCLUDES	= -I . -I $(FF_ROOT)
-CXXFLAGS	= #-g -DTRACE_FASTFLOW -DNO_DEFAULT_MAPPING -DBLOCKING_MODE -DFF_BOUNDED_BUFFER
+CXXFLAGS	= #-fopt-info-vec -fopt-info-vec-missed -g -DTRACE_FASTFLOW -DNO_DEFAULT_MAPPING -DBLOCKING_MODE -DFF_BOUNDED_BUFFER
 
 LDFLAGS 	= -pthread
-OPTFLAGS	= -O3 #-DNDEBUG #-fopt-info-vec -fopt-info-vec-missed
+OPTFLAGS	= -O3 #-DNDEBUG
 
 TARGETS 	= seq		\
               par		\
-              ff		\
-              ff_async
+              ff
 
 .PHONY: all clean cleanall
 .SUFFIXES: .cpp

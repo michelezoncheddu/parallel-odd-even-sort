@@ -43,7 +43,7 @@ unsigned odd_even_sort(T * const v, short phase, size_t end) {
 }
 
 struct Emitter : ff_monode_t<unsigned> {
-    explicit Emitter(unsigned nw) : nw{nw} {}
+    explicit Emitter(int nw) : nw{nw} {}
 
     unsigned* svc(unsigned *task) override {
         static unsigned remaining = 1; // The task that starts the emitter
@@ -66,7 +66,7 @@ struct Emitter : ff_monode_t<unsigned> {
         return GO_ON;
     }
 
-    unsigned const nw;
+    int const nw;
 };
 
 struct Worker : ff_node_t<unsigned> {
@@ -82,11 +82,6 @@ struct Worker : ff_node_t<unsigned> {
          * and the next svc call of this worker will happen only after that the emitter read the value.
          */
         return &swaps;
-
-        // TODO: try
-        // sendout
-        // alignment
-        // goon
     }
 
     vec_type * const v;
@@ -111,6 +106,12 @@ int main(int argc, char const *argv[]) {
     auto const n  = strtol(argv[1], nullptr, 10); // Array length
     auto const nw = strtol(argv[2], nullptr, 10);
 
+    if (n < 1 || nw < 1)
+        return EXIT_FAILURE;
+
+    if (n < nw)
+        return EXIT_FAILURE;
+
     auto v = create_random_vector<vec_type>(n, MIN, MAX, SEED);
 
     ffTime(START_TIME);
@@ -119,7 +120,7 @@ int main(int argc, char const *argv[]) {
                    std::vector<std::unique_ptr<ff_node>> workers;
                    auto const ptr = v.data();
                    size_t const chunk_len = v.size() / nw;
-                   int remaining = static_cast<int>(v.size() % nw);
+                   long remaining = static_cast<long>(v.size() % nw);
                    size_t offset = 0;
 
                    for (unsigned i = 0; i < nw - 1; ++i) {
