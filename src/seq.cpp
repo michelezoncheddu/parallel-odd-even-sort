@@ -23,7 +23,7 @@
  * @return the number of swaps
  */
 template <typename T>
-unsigned odd_even_sort(std::vector<T> &v, short start) {
+unsigned odd_even_sort(std::vector<T> &v, short const start) {
     unsigned swaps = 0;
     for (size_t i = start; i < v.size() - 1; i += 2) {
         auto first = v[i], second = v[i + 1];

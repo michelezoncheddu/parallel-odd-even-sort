@@ -24,12 +24,12 @@ using namespace ff;
  *
  * @tparam T the vector pointer type
  * @param v the pointer to the vector
- * @param start the phase
+ * @param phase the phase (odd or even)
  * @param end the end of the array
  * @return the number of swaps
  */
 template <typename T>
-unsigned odd_even_sort(T * const v, short phase, size_t end) {
+unsigned odd_even_sort(T * const v, short const phase, size_t const end) {
     unsigned swaps = 0;
     for (size_t i = phase; i < end; i += 2) {
         auto first = v[i], second = v[i + 1];
@@ -70,14 +70,14 @@ struct Emitter : ff_monode_t<unsigned> {
 };
 
 struct Worker : ff_node_t<unsigned> {
-    Worker(vec_type * const v, size_t end, short alignment) : v{v}, end{end}, alignment{alignment} {}
+    Worker(vec_type * const v, size_t const end, short alignment) : v{v}, end{end}, alignment{alignment} {}
 
     unsigned* svc(unsigned *) override {
         swaps = odd_even_sort(v, alignment, end);
 
         alignment = !alignment; // Change phase
 
-        /**
+        /*
          * I can send my local variable because it goes only to the emitter,
          * and the next svc call of this worker will happen only after that the emitter read the value.
          */
@@ -85,7 +85,7 @@ struct Worker : ff_node_t<unsigned> {
     }
 
     vec_type * const v;
-    size_t end;
+    size_t const end;
     short alignment;
 
     unsigned swaps = 0;

@@ -29,14 +29,14 @@ bool finished = false;
  *
  * @tparam T the vector pointer type
  * @param v the pointer to the vector
- * @param start the phase
+ * @param phase the phase (odd or even)
  * @param end the end of the array
  * @return the number of swaps
  */
 template <typename T>
-unsigned odd_even_sort(T * const v, short start, size_t end) {
+unsigned odd_even_sort(T * const v, bool const phase, size_t const end) {
     unsigned swaps = 0;
-    for (size_t i = start; i < end; i += 2) {
+    for (size_t i = phase; i < end; i += 2) {
         auto first = v[i], second = v[i + 1];
         auto cond = first > second;
         v[i] = cond ? second : first;
@@ -47,8 +47,20 @@ unsigned odd_even_sort(T * const v, short start, size_t end) {
     return swaps;
 }
 
+/**
+ * @brief
+ *
+ * @tparam T
+ * @param thid
+ * @param v
+ * @param end
+ * @param offset
+ * @param phases
+ * @param swaps
+ * @param barriers
+ */
 template <typename T>
-void thread_body(int thid, T * const v, size_t end, short alignment,
+void thread_body(int thid, T * const v, size_t const end, bool const offset,
         std::vector<unsigned> &phases,
         std::vector<unsigned> &swaps,
         std::vector<std::unique_ptr<barrier>> const &barriers) {
@@ -56,23 +68,50 @@ void thread_body(int thid, T * const v, size_t end, short alignment,
     auto const pos = thid * padding; // Cache-aware position in phases and swaps array
     auto const has_left_neigh = thid > 0, has_right_neigh = thid < nw - 1;
 
-    while (!finished) {
-        swaps[pos] |= odd_even_sort(v, !alignment, end); // Odd phase
-        
-        phases[pos]++; // Ready for the next phase
+    /*
+     * The key for the performance lies in the explicit '1' and '0' in the function call,
+     * and in the asynchronous wait for the neighbours threads.
+     * I know that repeating code is bad practice, but in this case
+     * is the only way to achieve better performances.
+     */
+    if (!offset) {
+        while (!finished) {
+            swaps[pos] |= odd_even_sort(v, 1, end); // Odd phase
 
-        // Wait my neighbours to be ready
-        if (has_right_neigh)
-            while (phases[pos] != phases[(thid + 1) * padding])
-                __asm__("nop"); // To force the compiler to don't "optimize" this loop
-        if (has_left_neigh)
-            while (phases[pos] != phases[(thid - 1) * padding])
-                __asm__("nop");
+            phases[pos]++; // Ready for the next phase
 
-        swaps[pos] |= odd_even_sort(v, alignment, end); // Even phase
+            // Wait my neighbours to be ready
+            if (has_right_neigh)
+                while (phases[pos] != phases[(thid + 1) * padding])
+                    __asm__("nop"); // To force the compiler to don't "optimize" this loop
+            if (has_left_neigh)
+                while (phases[pos] != phases[(thid - 1) * padding])
+                    __asm__("nop");
 
-        barriers[iter++]->wait();
-        swaps[pos] = 0;
+            swaps[pos] |= odd_even_sort(v, 0, end); // Even phase
+
+            barriers[iter++]->wait();
+            swaps[pos] = 0;
+        }
+    } else {
+        while (!finished) {
+            swaps[pos] |= odd_even_sort(v, 0, end); // Odd phase
+
+            phases[pos]++; // Ready for the next phase
+
+            // Wait my neighbours to be ready
+            if (has_right_neigh)
+                while (phases[pos] != phases[(thid + 1) * padding])
+                    __asm__("nop"); // To force the compiler to don't "optimize" this loop
+            if (has_left_neigh)
+                while (phases[pos] != phases[(thid - 1) * padding])
+                    __asm__("nop");
+
+            swaps[pos] |= odd_even_sort(v, 1, end); // Even phase
+
+            barriers[iter++]->wait();
+            swaps[pos] = 0;
+        }
     }
 }
 
@@ -166,7 +205,7 @@ int main(int argc, char const *argv[]) {
 
     // Thread pinning (works only on Linux)
     cpu_set_t cpuset;
-    for (unsigned i = 0; i < nw; ++i) {
+    for (int i = 0; i < nw; ++i) {
         CPU_ZERO(&cpuset);
         CPU_SET(i, &cpuset);
         if (0 != pthread_setaffinity_np(threads[i]->native_handle(), sizeof(cpu_set_t), &cpuset)) {
