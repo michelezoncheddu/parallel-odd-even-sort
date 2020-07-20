@@ -31,7 +31,7 @@ INCLUDES	= -I . -I $(FF_ROOT)
 CXXFLAGS	= #-fopt-info-vec -fopt-info-vec-missed -g -DTRACE_FASTFLOW -DNO_DEFAULT_MAPPING -DBLOCKING_MODE -DFF_BOUNDED_BUFFER
 
 LDFLAGS 	= -pthread
-OPTFLAGS	= -O3 #-DNDEBUG
+OPTFLAGS	= -O3 -march=native #-DNDEBUG
 
 TARGETS 	= seq		\
               par		\
