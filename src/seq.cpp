@@ -44,13 +44,18 @@ unsigned odd_even_sort(std::vector<T> &v, short const start) {
 int main(int argc, char const *argv[]) {
     if (argc < 2) {
         std::cout << "Usage is " << argv[0]
-                  << " n" << std::endl;
+                  << " n [seed]" << std::endl;
         return -1;
     }
 
     auto const n = strtol(argv[1], nullptr, 10);
 
-    auto v = create_random_vector<vec_type>(n, MIN, MAX, SEED);
+    std::vector<vec_type> v;
+    if (argc > 2)
+        v = create_random_vector<vec_type>(n, MIN, MAX, strtol(argv[2], nullptr, 10));
+    else
+        v = create_random_vector<vec_type>(n, MIN, MAX);
+
     unsigned swaps;
 
     // Dirty trick for getting the current thread handle
@@ -72,7 +77,7 @@ int main(int argc, char const *argv[]) {
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(
             std::chrono::system_clock::now() - start_time).count();
 
-    std::cout << duration << std::endl;
+    std::cout << "Time: " << duration << " (ms)" << std::endl;
 
     assert(std::is_sorted(v.begin(), v.end()));
     return 0;

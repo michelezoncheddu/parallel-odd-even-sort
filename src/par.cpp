@@ -7,6 +7,7 @@
 
 #include <algorithm>  // std::is_sorted
 #include <cassert>
+#include <cmath>      // for ceil
 #include <functional> // std::ref, std::cref
 #include <iostream>
 #include <memory>     // Smart pointers
@@ -17,11 +18,7 @@
 #include <config.hpp>
 #include <util.hpp>
 
-int nw;
-
-// Padding for the phases and swap array
-unsigned constexpr padding = 64 / sizeof(unsigned); // TODO: read from input (at least)
-
+short cache_padding;
 bool finished = false;
 
 /**
@@ -60,12 +57,12 @@ unsigned odd_even_sort(T * const v, bool const phase, size_t const end) {
  * @param barriers
  */
 template <typename T>
-void thread_body(int thid, T * const v, size_t const end, bool const offset,
+void thread_body(int thid, T * const v, size_t const end, bool const offset, int const nw,
         std::vector<unsigned> &phases,
         std::vector<unsigned> &swaps,
         std::vector<std::unique_ptr<barrier>> const &barriers) {
     auto iter = 0;
-    auto const pos = thid * padding; // Cache-aware position in phases and swaps array
+    auto const pos = thid * cache_padding; // Cache-aware position in phases and swaps array
     auto const has_left_neigh = thid > 0, has_right_neigh = thid < nw - 1;
 
     /*
@@ -82,10 +79,10 @@ void thread_body(int thid, T * const v, size_t const end, bool const offset,
 
             // Wait my neighbours to be ready
             if (has_right_neigh)
-                while (phases[pos] != phases[(thid + 1) * padding])
+                while (phases[pos] != phases[(thid + 1) * cache_padding])
                     __asm__("nop"); // To force the compiler to don't "optimize" this loop
             if (has_left_neigh)
-                while (phases[pos] != phases[(thid - 1) * padding])
+                while (phases[pos] != phases[(thid - 1) * cache_padding])
                     __asm__("nop");
 
             swaps[pos] |= odd_even_sort(v, 0, end); // Even phase
@@ -101,10 +98,10 @@ void thread_body(int thid, T * const v, size_t const end, bool const offset,
 
             // Wait my neighbours to be ready
             if (has_right_neigh)
-                while (phases[pos] != phases[(thid + 1) * padding])
+                while (phases[pos] != phases[(thid + 1) * cache_padding])
                     __asm__("nop"); // To force the compiler to don't "optimize" this loop
             if (has_left_neigh)
-                while (phases[pos] != phases[(thid - 1) * padding])
+                while (phases[pos] != phases[(thid - 1) * cache_padding])
                     __asm__("nop");
 
             swaps[pos] |= odd_even_sort(v, 1, end); // Even phase
@@ -128,7 +125,7 @@ void controller_body(std::vector<unsigned> const &swaps, std::vector<std::unique
 
         // While there are no swaps and some worker is still running...
         while (!local_swaps && barriers[iter]->read() > 1) {
-            for (size_t i = 0; i < swaps.size(); i += padding)
+            for (size_t i = 0; i < swaps.size(); i += cache_padding)
                 local_swaps |= swaps[i];
         }
 
@@ -136,7 +133,7 @@ void controller_body(std::vector<unsigned> const &swaps, std::vector<std::unique
         size_t i = 0;
         while (!local_swaps && i < swaps.size()) {
             local_swaps |= swaps[i];
-            i += padding;
+            i += cache_padding;
         }
 
         // No swaps, end of the computation
@@ -158,30 +155,45 @@ void controller_body(std::vector<unsigned> const &swaps, std::vector<std::unique
 int main(int argc, char const *argv[]) {
     if (argc < 3) {
         std::cout << "Usage is " << argv[0]
-                  << " n nw" << std::endl;
+                  << " n nw [seed] [cache-line size]" << std::endl;
         return -1;
     }
 
-    auto const n = strtol(argv[1], nullptr, 10); // Array length
-    nw = static_cast<int>(strtol(argv[2], nullptr, 10));
+    auto const n  = strtol(argv[1], nullptr, 10); // Array length
+    auto const nw = static_cast<int>(strtol(argv[2], nullptr, 10));
 
-    if (n < 1 || nw < 1)
-        return EXIT_FAILURE;
+    if (n < 1 || nw < 1) {
+        std::cout << "n and nw must be greater than zero" << std::endl;
+        return -1;
+    }
 
-    if (n < nw)
-        return EXIT_FAILURE;
+    if (n < nw) {
+        std::cout << "nw must be greater than n" << std::endl;
+        return -1;
+    }
 
-    auto v = create_random_vector<vec_type>(n, MIN, MAX, SEED);
+    // Create the vector
+    std::vector<vec_type> v;
+    if (argc > 3)
+        v = create_random_vector<vec_type>(n, MIN, MAX, strtol(argv[3], nullptr, 10));
+    else
+        v = create_random_vector<vec_type>(n, MIN, MAX);
     auto const ptr = v.data();
+
+    // Setting the cache_padding
+    if (argc > 4)
+        cache_padding = ceil(static_cast<double>(strtol(argv[4], nullptr, 10)) / sizeof(vec_type));
+    else
+        cache_padding = 64 / sizeof(vec_type);
 
     auto const start_time = std::chrono::system_clock::now();
 
-    std::vector<std::unique_ptr<barrier>> barriers(n); // n is an upper bound of the number of iterations
+    std::vector<std::unique_ptr<barrier>> barriers(n); // n is an upper bound for the number of iterations
     for (auto &elem : barriers)
         elem = std::make_unique<barrier>(nw + 1); // + 1 for the controller
 
-    std::vector<unsigned> phases(nw * padding, 0);
-    std::vector<unsigned> swaps(nw * padding, 0);
+    std::vector<unsigned> phases(nw * cache_padding, 0);
+    std::vector<unsigned> swaps(nw * cache_padding, 0);
 
     std::vector<std::unique_ptr<std::thread>> threads;
     threads.reserve(nw);
@@ -194,13 +206,13 @@ int main(int argc, char const *argv[]) {
 
     for (int i = 0; i < nw - 1; ++i) {
         threads.push_back(std::make_unique<std::thread>(
-                thread_body<vec_type>, i, ptr + offset, chunk_len + (remaining > 0), offset % 2,
+                thread_body<vec_type>, i, ptr + offset, chunk_len + (remaining > 0), offset % 2, nw,
                 std::ref(phases), std::ref(swaps), std::cref(barriers)));
         offset += chunk_len + (remaining > 0);
         --remaining;
     }
     threads.push_back(std::make_unique<std::thread>(
-            thread_body<vec_type>, nw - 1, ptr + offset, chunk_len - 1, offset % 2,
+            thread_body<vec_type>, nw - 1, ptr + offset, chunk_len - 1, offset % 2, nw,
             std::ref(phases), std::ref(swaps), std::cref(barriers)));
 
     // Thread pinning (works only on Linux)
@@ -226,7 +238,7 @@ int main(int argc, char const *argv[]) {
     auto const duration = std::chrono::duration_cast<std::chrono::milliseconds>(
             std::chrono::system_clock::now() - start_time).count();
 
-    std::cout << duration << std::endl;
+    std::cout << "Time: " << duration << " (ms)" << std::endl;
 
     assert(std::is_sorted(v.begin(), v.end()));
 

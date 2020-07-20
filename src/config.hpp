@@ -10,5 +10,3 @@ using vec_type = int;
 // Upper and lower bounds for array elements
 #define MIN 0
 #define MAX INT32_MAX
-
-#define SEED 1234 // TODO: remove!

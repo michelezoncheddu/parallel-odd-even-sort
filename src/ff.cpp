@@ -99,20 +99,29 @@ struct Worker : ff_node_t<unsigned> {
 int main(int argc, char const *argv[]) {
     if (argc < 3) {
         std::cout << "Usage is " << argv[0]
-                  << " n nw" << std::endl;
+                  << " n nw [seed]" << std::endl;
         return -1;
     }
 
     auto const n  = strtol(argv[1], nullptr, 10); // Array length
     auto const nw = strtol(argv[2], nullptr, 10);
 
-    if (n < 1 || nw < 1)
-        return EXIT_FAILURE;
+    if (n < 1 || nw < 1) {
+        std::cout << "n and nw must be greater than zero" << std::endl;
+        return -1;
+    }
 
-    if (n < nw)
-        return EXIT_FAILURE;
+    if (n < nw) {
+        std::cout << "nw must be greater than n" << std::endl;
+        return -1;
+    }
 
-    auto v = create_random_vector<vec_type>(n, MIN, MAX, SEED);
+    // Create the vector
+    std::vector<vec_type> v;
+    if (argc > 3)
+        v = create_random_vector<vec_type>(n, MIN, MAX, strtol(argv[3], nullptr, 10));
+    else
+        v = create_random_vector<vec_type>(n, MIN, MAX);
 
     ffTime(START_TIME);
     Emitter emitter(nw);
@@ -142,7 +151,7 @@ int main(int argc, char const *argv[]) {
     }
     ffTime(STOP_TIME);
 
-    std::cout << "Time: " << ffTime(GET_TIME) << " (ms)" << std::endl;
+    std::cout << "Time: " << ffTime(GET_TIME) << " ms" << std::endl;
 
     assert(std::is_sorted(v.begin(), v.end()));
 

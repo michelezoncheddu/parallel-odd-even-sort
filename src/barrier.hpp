@@ -17,8 +17,6 @@ private:
 public:
     explicit barrier(int);
 
-    void set(int);
-
     void dec();
 
     void wait();

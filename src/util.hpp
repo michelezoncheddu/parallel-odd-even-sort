@@ -12,9 +12,17 @@
 #include <random>
 #include <vector>
 
+/**
+ *
+ * @tparam T
+ * @param n
+ * @param min
+ * @param max
+ * @param seed
+ * @return
+ */
 template <typename T>
-std::vector<T> create_random_vector(size_t n, int min, int max, unsigned seed) {
-    //std::mt19937 gen{std::random_device{}()};
+std::vector<T> create_random_vector(size_t n, int min, int max, unsigned seed = std::random_device{}()) {
     std::mt19937 gen{seed};
 
     std::uniform_int_distribution<> dis(min, max);

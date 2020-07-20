@@ -9,10 +9,6 @@
 
 barrier::barrier(int n) : n{n} {}
 
-void barrier::set(int _n) {
-    n = _n;
-}
-
 void barrier::dec() {
     --n;
 }
