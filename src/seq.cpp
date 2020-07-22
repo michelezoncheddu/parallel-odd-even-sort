@@ -28,7 +28,7 @@ unsigned odd_even_sort(std::vector<T> &v, short const start) {
     for (size_t i = start; i < v.size() - 1; i += 2) {
         auto first = v[i], second = v[i + 1];
         auto cond = first > second;
-        v[i] = cond ? second : first;
+        v[i]     = cond ? second : first;
         v[i + 1] = cond ? first : second;
         if (v[i] != first)
             swaps++;
@@ -58,7 +58,7 @@ int main(int argc, char const *argv[]) {
 
     unsigned swaps;
 
-    // Dirty trick for getting the current thread handle
+    // Dirty trick for getting the current thread handle (works only on Linux)
     auto thread_id = std::this_thread::get_id();
     auto native_handle = *reinterpret_cast<std::thread::native_handle_type*>(&thread_id);
     cpu_set_t cpuset;

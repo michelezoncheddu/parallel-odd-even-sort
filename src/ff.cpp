@@ -34,7 +34,7 @@ unsigned odd_even_sort(T * const v, short const phase, size_t const end) {
     for (size_t i = phase; i < end; i += 2) {
         auto first = v[i], second = v[i + 1];
         auto cond = first > second;
-        v[i] = cond ? second : first;
+        v[i]     = cond ? second : first;
         v[i + 1] = cond ? first : second;
         if (v[i] != first)
             swaps++;

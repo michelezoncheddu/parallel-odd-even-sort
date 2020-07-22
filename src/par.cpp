@@ -31,12 +31,12 @@ bool finished = false;
  * @return the number of swaps
  */
 template <typename T>
-unsigned odd_even_sort(T * const v, bool const phase, size_t const end) {
+unsigned odd_even_sort(T * const v, short const phase, size_t const end) {
     unsigned swaps = 0;
     for (size_t i = phase; i < end; i += 2) {
         auto first = v[i], second = v[i + 1];
         auto cond = first > second;
-        v[i] = cond ? second : first;
+        v[i]     = cond ? second : first;
         v[i + 1] = cond ? first : second;
         if (v[i] != first)
             swaps++;
@@ -120,6 +120,7 @@ void thread_body(int thid, T * const v, size_t const end, bool const offset, int
  */
 void controller_body(std::vector<unsigned> const &swaps, std::vector<std::unique_ptr<barrier>> const &barriers) {
     auto iter = 0;
+
     while (true) {
         unsigned local_swaps = 0;
 
@@ -182,9 +183,9 @@ int main(int argc, char const *argv[]) {
 
     // Setting the cache_padding
     if (argc > 4)
-        cache_padding = ceil(static_cast<double>(strtol(argv[4], nullptr, 10)) / sizeof(vec_type));
+        cache_padding = ceil(static_cast<double>(strtol(argv[4], nullptr, 10)) / sizeof(unsigned));
     else
-        cache_padding = 64 / sizeof(vec_type);
+        cache_padding = 64 / sizeof(unsigned);
 
     auto const start_time = std::chrono::system_clock::now();
 
