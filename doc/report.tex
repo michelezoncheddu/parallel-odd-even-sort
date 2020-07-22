@@ -1,0 +1,28 @@
+\documentclass[a4paper, 12pt]{article}
+
+\usepackage{amsmath} % For math
+\usepackage{amssymb} % For symbols
+\usepackage{enumitem} % For lists spacing
+\usepackage{graphicx} % For images
+\usepackage[hidelinks]{hyperref} % For links
+\usepackage[utf8]{inputenc} % For input encoding
+\usepackage{setspace} % For line spacing
+
+
+\begin{document}
+
+	\setstretch{1.2}
+
+	\setlist[itemize]{itemsep=1mm}
+
+	\tableofcontents
+	\clearpage
+
+	\sloppy
+    \widowpenalty 10000 % To avoid widow lines
+
+	\input{resources/introduction.tex}
+	\input{resources/sequential.tex}
+	\input{resources/parallel.tex}
+
+\end{document}

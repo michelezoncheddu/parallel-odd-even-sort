@@ -1,0 +1,8 @@
+\section{Parallel version}
+The most obvious division of the work is to statically split the array among the threads. Some testing has proven the work to be well-balanced, with an average difference of workload of 4.31\% among threads; for this reason I didn't consider any form of load balancing, such as job stealing.
+\bigbreak
+
+The first parallel version was based on a thread pool \dots
+
+\paragraph{Later}
+Since the Xeon for the tests has no MCDRAM installed, and therefore its mesh is configured with the ``all-to-all" clustering mode, for the thread pinning I chose a linear mapping, putting one thread per core, from 1 to 64. With my data partitioning, threads with adjacent thread IDs have adjacent array partitions, and since the L2 cache is shared between two cores (0-1, 2-3, \dots), this linear mapping maximizes the sharing of the cache.
