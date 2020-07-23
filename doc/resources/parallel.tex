@@ -1,8 +1,49 @@
 \section{Parallel version}
-The most obvious division of the work is to statically split the array among the threads. Some testing has proven the work to be well-balanced, with an average difference of workload of 4.31\% among threads; for this reason I didn't consider any form of load balancing, such as job stealing.
+The most obvious division of the work is to statically split the array in equal chunks among the threads. If the array has $n$ elements and there are $nw$ workers, I have $nw - 1$ overlapping points. It's like I have to split $n + nw - 1$ elements among $nw$ workers. Simplifying, the average chunk length is $\frac{n - 1}{nw} + 1$ (if $n - 1$ is not divisible by $nw$, the remaining elements will be distributed uniformly). Here is an example with $n = 9$ and $nw = 4$.
+
+\paragraph{How to split?}
+In this problem, each thread (except for the last one) shares its last element with another thread. 
 \bigbreak
 
-The first parallel version was based on a thread pool \dots
+Some testing has proven the work to be well-balanced in this way, with an average difference of workload of 4.31\% among threads; hence I didn't consider any form of load balancing, such as job stealing.
+
+In one of the two phases, each thread (except for the last one) works on an element of the array that is shared with another thread. This may lead to \textit{false sharing} problems, that will be discussed later on.
+
+TODO: IMAGE OF DIVISION
+
+Each phase is trivial to parallelize on a global array, but the switch from one phase to the next one requires a synchronization between the threads. If the two phases are synchronized, it is not possible that two threads work on the same element at the same time.
+\bigbreak
+
+\paragraph{Barriers}
+To synchronize the threads, a solution is to use barriers. The best solution has proven to be to use as many barriers as many iterations the algorithm would do (an upper bound is given by the size of the array, since the odd-even sort is a parallel version of the bubble sort). A slightly slower solution is the one with only a single reusable barrier, that involves two atomic variables (one for the current thread count, and one for the count of the ``generations''). The slowest solution is the one with mutexes and condition variables, because of the overhead of descheduling.
+\bigbreak
+
+The first parallel version was based on a pool of workers, each one with its pointer to the global array, moved by an offset. Every thread executes the odd and even phase, separated by a barrier then adds its total number of swaps to the global atomic variable, that quickly becomes the bottleneck, since the every operation may take a lock on the bus. The threads exit from the loop when there are no swaps in the global variable (if there is any swap in the local phase, there's no need for that thread to read the global variable). Every iteration goes on following this schema:
+\begin{verbatim}
+execute odd phase
+barrier
+execute even phase
+update global swaps
+barrier
+check exit condition
+barrier
+reset global swaps
+\end{verbatim}
+
+In the second version I avoided the atomic bottleneck by using a shared vector in which every thread writes its number of swaps; the vector was padded to the cache line to avoid false sharing. The switch from the first to the second phase is synchronized among the workers. Then I added a ``controller'' thread, to speed up the switch to the next iteration (from the end of the second phase to the first again): the controller reads in a tight loop the swaps array, and if there is at least a swap, it immediately decreases the value of another barrier, shared among the workers and the controller. In this way, in most cases (non-exit situations), the workers have only to wait the last worker to restart another iteration, without any overhead to sum or check the global number of swaps. This had a good impact on the performance, and also reduced the number of barriers from 3 to 2, since there's no need to wait that all threads had modified the global variable.
+
+\paragraph{Possible false sharing}
+Another try was to avoid the possible false sharing between adjacent threads, so I made the threads to work on a local copy of their portion of the array, synchronizing themselves with the rightmost element (the one shared with the next worker). This solution had slightly worse performances, probably because the false sharing was not a problem at all: in fact, the threads run at almost the same speed (as said in the load balancing considerations) from left to right, hence when a thread arrives to its rightmost part, the neighbor is no more working on that side of the array. I'm assuming that the portions are big enough to not fit in a L1 cache line (with cache lines of 64 bytes and elements of 4 bytes, at least 16 elements). The time spent for the copy of the array was negligible.
+
+\paragraph{Final version}
+This version 
+
+\bigbreak
+
+Non solo più del 10\% più lenta, ma smetteva di scalare a 10 thread.
+\bigbreak
+
+The switch from 128-bit to 512-bit registers decreased the maximum speedup, especially for few elements (with 100K elements, from 17.6 to 9.3), but improved a lot the superlinear performances.
 
 \paragraph{Later}
 Since the Xeon for the tests has no MCDRAM installed, and therefore its mesh is configured with the ``all-to-all" clustering mode, for the thread pinning I chose a linear mapping, putting one thread per core, from 1 to 64. With my data partitioning, threads with adjacent thread IDs have adjacent array partitions, and since the L2 cache is shared between two cores (0-1, 2-3, \dots), this linear mapping maximizes the sharing of the cache.
