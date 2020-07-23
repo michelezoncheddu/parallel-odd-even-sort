@@ -128,8 +128,8 @@ int main(int argc, char const *argv[]) {
     ff_Farm<> farm([&]() {
                    std::vector<std::unique_ptr<ff_node>> workers;
                    auto const ptr = v.data();
-                   size_t const chunk_len = v.size() / nw;
-                   long remaining = static_cast<long>(v.size() % nw);
+                   size_t const chunk_len = (v.size() - 1) / nw;
+                   long remaining = static_cast<long>((v.size() - 1) % nw);
                    size_t offset = 0;
 
                    for (unsigned i = 0; i < nw - 1; ++i) {
@@ -139,7 +139,7 @@ int main(int argc, char const *argv[]) {
                        --remaining;
                    }
                    workers.push_back(make_unique<Worker>(
-                           ptr + offset, chunk_len - 1, offset % 2));
+                           ptr + offset, chunk_len, offset % 2));
                    return workers;
                } (),
                emitter);

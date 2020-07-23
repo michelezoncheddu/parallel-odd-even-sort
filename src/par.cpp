@@ -50,7 +50,7 @@ unsigned odd_even_sort(T * const v, short const phase, size_t const end) {
  * @tparam T
  * @param thid
  * @param v
- * @param end
+ * @param end (the index is included)
  * @param offset
  * @param phases
  * @param swaps
@@ -199,8 +199,8 @@ int main(int argc, char const *argv[]) {
     std::vector<std::unique_ptr<std::thread>> threads;
     threads.reserve(nw);
 
-    size_t const chunk_len = v.size() / nw;
-    long remaining = static_cast<long>(v.size() % nw);
+    size_t const chunk_len = (v.size() - 1) / nw;
+    long remaining = static_cast<long>((v.size() - 1) % nw);
     size_t offset = 0;
 
     std::thread controller(controller_body, std::cref(swaps), std::cref(barriers));
@@ -213,24 +213,24 @@ int main(int argc, char const *argv[]) {
         --remaining;
     }
     threads.push_back(std::make_unique<std::thread>(
-            thread_body<vec_type>, nw - 1, ptr + offset, chunk_len - 1, offset % 2, nw,
+            thread_body<vec_type>, nw - 1, ptr + offset, chunk_len, offset % 2, nw,
             std::ref(phases), std::ref(swaps), std::cref(barriers)));
 
     // Thread pinning (works only on Linux)
     cpu_set_t cpuset;
+    CPU_ZERO(&cpuset);
+    CPU_SET(0, &cpuset);
+    if (0 != pthread_setaffinity_np(controller.native_handle(), sizeof(cpu_set_t), &cpuset)) {
+        std::cout << "Error in thread pinning" << std::endl;
+        return EXIT_FAILURE;
+    }
     for (int i = 0; i < nw; ++i) {
         CPU_ZERO(&cpuset);
-        CPU_SET(i, &cpuset);
+        CPU_SET(i + 1, &cpuset);
         if (0 != pthread_setaffinity_np(threads[i]->native_handle(), sizeof(cpu_set_t), &cpuset)) {
             std::cout << "Error in thread pinning" << std::endl;
             return EXIT_FAILURE;
         }
-    }
-    CPU_ZERO(&cpuset);
-    CPU_SET(nw, &cpuset);
-    if (0 != pthread_setaffinity_np(controller.native_handle(), sizeof(cpu_set_t), &cpuset)) {
-        std::cout << "Error in thread pinning" << std::endl;
-        return EXIT_FAILURE;
     }
 
     controller.join();
