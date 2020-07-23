@@ -21,9 +21,6 @@
 short cache_padding;
 bool finished = false;
 
-unsigned constexpr padding_2 = 64 / sizeof(vec_type) / 2;
-
-
 /**
  * @brief It performs an odd or an even sorting phase on the array
  *
@@ -61,63 +58,58 @@ unsigned odd_even_sort(T * const v, short const phase, size_t const end) {
  */
 template <typename T>
 void thread_body(int thid, T * const v, size_t const end, bool const offset, int const nw,
-                 std::vector<unsigned> &phases,
-                 std::vector<unsigned> &swaps,
-                 std::vector<vec_type> &shared,
-                 std::vector<std::unique_ptr<barrier>> const &barriers) {
-    std::vector<vec_type> local_vector;
-    for (size_t i = 0; i < end; ++i)
-        local_vector.push_back(v[i]);
-
-    auto pos = thid * cache_padding;
-
+        std::vector<unsigned> &phases,
+        std::vector<unsigned> &swaps,
+        std::vector<std::unique_ptr<barrier>> const &barriers) {
     auto iter = 0;
-    auto const my_end = local_vector.size() - 1;
+    auto const pos = thid * cache_padding; // Cache-aware position in phases and swaps array
     auto const has_left_neigh = thid > 0, has_right_neigh = thid < nw - 1;
 
-    while (!finished) {
-        swaps[pos] |= odd_even_sort(local_vector.data(), !offset, my_end);
-        if (has_right_neigh && my_end % 2 != offset) {
-            if (local_vector[my_end] > shared[(thid + 1) * padding_2]) {
-                std::swap(local_vector[my_end], shared[(thid + 1) * padding_2]);
-                swaps[pos] |= true;
-            }
-        }
+    /*
+     * The key for the performance lies in the explicit '1' and '0' in the function call,
+     * and in the asynchronous wait for the neighbours threads.
+     * I know that repeating code is bad practice, but in this case
+     * is the only way to achieve better performances.
+     */
+    if (!offset) {
+        while (!finished) {
+            swaps[pos] |= odd_even_sort(v, 1, end); // Odd phase
 
-        if (!offset)
-            local_vector[0] = shared[thid * padding_2];
-        else
-            shared[thid * padding_2] = local_vector[0];
+            phases[pos]++; // Ready for the next phase
 
-        phases[pos]++; // Ready for the next phase
-
-        // Wait my neighbours to be ready
-        if (has_right_neigh)
-            while (phases[pos] != phases[(thid + 1) * cache_padding])
+            // Wait my neighbours to be ready
+            if (has_right_neigh)
+                while (phases[pos] != phases[(thid + 1) * cache_padding])
                     __asm__("nop"); // To force the compiler to don't "optimize" this loop
-        if (has_left_neigh)
-            while (phases[pos] != phases[(thid - 1) * cache_padding])
+            if (has_left_neigh)
+                while (phases[pos] != phases[(thid - 1) * cache_padding])
                     __asm__("nop");
 
-        swaps[pos] |= odd_even_sort(local_vector.data(), offset, my_end);
-        if (has_right_neigh && my_end % 2 == offset) {
-            if (local_vector[my_end] > shared[(thid + 1) * padding_2]) {
-                std::swap(local_vector[my_end], shared[(thid + 1) * padding_2]);
-                swaps[pos] |= true;
-            }
+            swaps[pos] |= odd_even_sort(v, 0, end); // Even phase
+
+            barriers[iter++]->wait();
+            swaps[pos] = 0;
         }
+    } else {
+        while (!finished) {
+            swaps[pos] |= odd_even_sort(v, 0, end); // Odd phase
 
-        if (offset)
-            local_vector[0] = shared[thid * padding_2];
-        else
-            shared[thid * padding_2] = local_vector[0];
+            phases[pos]++; // Ready for the next phase
 
-        barriers[iter++]->wait();
-        swaps[pos] = 0;
+            // Wait my neighbours to be ready
+            if (has_right_neigh)
+                while (phases[pos] != phases[(thid + 1) * cache_padding])
+                    __asm__("nop"); // To force the compiler to don't "optimize" this loop
+            if (has_left_neigh)
+                while (phases[pos] != phases[(thid - 1) * cache_padding])
+                    __asm__("nop");
+
+            swaps[pos] |= odd_even_sort(v, 1, end); // Even phase
+
+            barriers[iter++]->wait();
+            swaps[pos] = 0;
+        }
     }
-
-    for (auto i = 0; i < local_vector.size(); ++i)
-        v[i] = local_vector[i];
 }
 
 /**
@@ -203,7 +195,6 @@ int main(int argc, char const *argv[]) {
 
     std::vector<unsigned> phases(nw * cache_padding, 0);
     std::vector<unsigned> swaps(nw * cache_padding, 0);
-    std::vector<vec_type> shared(nw * padding_2);
 
     std::vector<std::unique_ptr<std::thread>> threads;
     threads.reserve(nw);
@@ -214,40 +205,32 @@ int main(int argc, char const *argv[]) {
 
     std::thread controller(controller_body, std::cref(swaps), std::cref(barriers));
 
-    for (unsigned i = 0; i < nw; ++i) {
-        shared[i * padding_2] = v[offset];
-        --remaining;
-    }
-
-    offset = 0;
-    remaining = static_cast<int>((v.size() - 1) % nw);
-
     for (int i = 0; i < nw - 1; ++i) {
         threads.push_back(std::make_unique<std::thread>(
                 thread_body<vec_type>, i, ptr + offset, chunk_len + (remaining > 0), offset % 2, nw,
-                std::ref(phases), std::ref(swaps), std::ref(shared), std::cref(barriers)));
+                std::ref(phases), std::ref(swaps), std::cref(barriers)));
         offset += chunk_len + (remaining > 0);
         --remaining;
     }
     threads.push_back(std::make_unique<std::thread>(
-            thread_body<vec_type>, nw - 1, ptr + offset, chunk_len + 1, offset % 2, nw,
-            std::ref(phases), std::ref(swaps), std::ref(shared), std::cref(barriers)));
+            thread_body<vec_type>, nw - 1, ptr + offset, chunk_len, offset % 2, nw,
+            std::ref(phases), std::ref(swaps), std::cref(barriers)));
 
     // Thread pinning (works only on Linux)
     cpu_set_t cpuset;
+    CPU_ZERO(&cpuset);
+    CPU_SET(0, &cpuset);
+    if (0 != pthread_setaffinity_np(controller.native_handle(), sizeof(cpu_set_t), &cpuset)) {
+        std::cout << "Error in thread pinning" << std::endl;
+        return EXIT_FAILURE;
+    }
     for (int i = 0; i < nw; ++i) {
         CPU_ZERO(&cpuset);
-        CPU_SET(i, &cpuset);
+        CPU_SET(i + 1, &cpuset);
         if (0 != pthread_setaffinity_np(threads[i]->native_handle(), sizeof(cpu_set_t), &cpuset)) {
             std::cout << "Error in thread pinning" << std::endl;
             return EXIT_FAILURE;
         }
-    }
-    CPU_ZERO(&cpuset);
-    CPU_SET(nw, &cpuset);
-    if (0 != pthread_setaffinity_np(controller.native_handle(), sizeof(cpu_set_t), &cpuset)) {
-        std::cout << "Error in thread pinning" << std::endl;
-        return EXIT_FAILURE;
     }
 
     controller.join();
