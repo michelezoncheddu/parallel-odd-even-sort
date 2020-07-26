@@ -15,7 +15,6 @@ Here are the completion time improvements with the vectorization (tested with 10
     \item 128 bit vector registers: 15.4s (1.95 times faster)
     \item 512 bit vector registers: 3.7s (8.11 times faster)
 \end{itemize}
-This was what expected from the vectorization, a perfect and linear performance improvement.
 
 \paragraph{Thread pinning}
 During the tests, I noticed that sometimes the thread was moved around the logical threads of the Xeon, causing cache invalidations and inconsistent performance on many different trials. Since the \texttt{pthread\_setaffinity\_np} function requires a native handle of the thread to pin, and there's no direct way to get this handle from the main thread in C++, I used a dirty trick that casts the thread id to a \texttt{std::thread::native\_handle\_type}. In this way I achieved more consistent results in testing.
