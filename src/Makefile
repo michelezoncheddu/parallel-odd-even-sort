@@ -28,7 +28,7 @@ FF_ROOT = /usr/local/include/fastflow
 
 CXX			= g++-9 -std=c++17 -Wall
 INCLUDES	= -I . -I $(FF_ROOT)
-CXXFLAGS	= #-fopt-info-vec -fopt-info-vec-missed -g -DTRACE_FASTFLOW -DNO_DEFAULT_MAPPING -DBLOCKING_MODE -DFF_BOUNDED_BUFFER
+CXXFLAGS	= #-fopt-info-vec -fopt-info-vec-missed -DTRACE_FASTFLOW -DNO_DEFAULT_MAPPING -DBLOCKING_MODE -DFF_BOUNDED_BUFFER
 
 LDFLAGS 	= -pthread
 OPTFLAGS	= -O3 -march=native #-DNDEBUG

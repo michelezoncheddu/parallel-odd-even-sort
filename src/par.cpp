@@ -66,10 +66,10 @@ void thread_body(int thid, T * const v, size_t const end, bool const offset, int
     auto const has_left_neigh = thid > 0, has_right_neigh = thid < nw - 1;
 
     /*
-     * The key for the performance lies in the explicit '1' and '0' in the function call,
-     * and in the asynchronous wait for the neighbours threads.
      * I know that repeating code is bad practice, but in this case
      * is the only way to achieve better performances.
+     * The key for the performance lies in the explicit '1' and '0' in the function call,
+     * and in the asynchronous wait for the neighbours threads.
      */
     if (!offset) {
         while (!finished) {
@@ -80,10 +80,10 @@ void thread_body(int thid, T * const v, size_t const end, bool const offset, int
             // Wait my neighbours to be ready
             if (has_right_neigh)
                 while (phases[pos] != phases[(thid + 1) * cache_padding])
-                        __asm__("nop"); // To force the compiler to don't "optimize" this loop
+                    __asm__("nop"); // To force the compiler to don't "optimize" this loop
             if (has_left_neigh)
                 while (phases[pos] != phases[(thid - 1) * cache_padding])
-                        __asm__("nop");
+                    __asm__("nop");
 
             swaps[pos] |= odd_even_sort(v, 0, end); // Even phase
 
@@ -99,10 +99,10 @@ void thread_body(int thid, T * const v, size_t const end, bool const offset, int
             // Wait my neighbours to be ready
             if (has_right_neigh)
                 while (phases[pos] != phases[(thid + 1) * cache_padding])
-                        __asm__("nop"); // To force the compiler to don't "optimize" this loop
+                    __asm__("nop"); // To force the compiler to don't "optimize" this loop
             if (has_left_neigh)
                 while (phases[pos] != phases[(thid - 1) * cache_padding])
-                        __asm__("nop");
+                    __asm__("nop");
 
             swaps[pos] |= odd_even_sort(v, 1, end); // Even phase
 
@@ -214,6 +214,7 @@ int main(int argc, char const *argv[]) {
     }
 
     // Thread pinning (works only on Linux)
+    auto const hw_concurrency = std::thread::hardware_concurrency();
     cpu_set_t cpuset;
     CPU_ZERO(&cpuset);
     CPU_SET(0, &cpuset);
@@ -223,7 +224,7 @@ int main(int argc, char const *argv[]) {
     }
     for (int i = 0; i < nw; ++i) {
         CPU_ZERO(&cpuset);
-        CPU_SET(i + 1, &cpuset);
+        CPU_SET((i + 1) % hw_concurrency, &cpuset);
         if (0 != pthread_setaffinity_np(threads[i]->native_handle(), sizeof(cpu_set_t), &cpuset)) {
             std::cout << "Error in thread pinning" << std::endl;
             return EXIT_FAILURE;

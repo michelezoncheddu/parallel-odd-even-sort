@@ -1,5 +1,5 @@
 /**
- * @file   par.cpp
+ * @file   par_local.cpp
  * @brief  STD thread parallel implementation of the odd-even sort algorithm
  * @author Michele Zoncheddu
  */

@@ -46,10 +46,11 @@ struct Emitter : ff_monode_t<unsigned> {
     explicit Emitter(int nw) : nw{nw} {}
 
     unsigned* svc(unsigned *task) override {
+        // Static variables instead of the struct-ones give slightly better performances
         static unsigned remaining = 1; // The task that starts the emitter
         static unsigned swaps = 1;
         static unsigned dummy_task = 0;
-        static bool previous_zero = false;
+        static bool previous_zero = false; // I need to stop after two consecutive phases with no swaps
 
         // task always from feedback
         if (!swaps)
@@ -132,14 +133,12 @@ int main(int argc, char const *argv[]) {
                    long remaining = static_cast<long>((v.size() - 1) % nw);
                    size_t offset = 0;
 
-                   for (unsigned i = 0; i < nw - 1; ++i) {
+                   for (unsigned i = 0; i < nw; ++i) {
                        workers.push_back(make_unique<Worker>(
                                ptr + offset, chunk_len + (remaining > 0), offset % 2));
                        offset += chunk_len + (remaining > 0);
                        --remaining;
                    }
-                   workers.push_back(make_unique<Worker>(
-                           ptr + offset, chunk_len, offset % 2));
                    return workers;
                } (),
                emitter);
