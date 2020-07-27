@@ -1,0 +1,13 @@
+\section{How to run the project}
+\begin{enumerate}
+    \item Compile the project with the command \texttt{make}. A compiler that supports the C++14 standard is required.
+    
+    \textbf{Note}: if you are NOT compiling on a Linux machine, please remove the \texttt{-DLINUX\_MACHINE} flag from the Makefile to remove the Linux-specific code.
+
+    \item Run the project:
+    \begin{itemize}
+        \item The parameters for the sequential version are: vector length, seed (optional: random if not specified);
+        \item The parameters for the parallel version are: vector length, number of workers, seed (optional: random if not specified), cache-line size (optional: 64 if not specified);
+        \item The parameters for the FastFlow version are: vector length, number of workers, seed (optional: random if not specified).
+    \end{itemize}
+\end{enumerate}

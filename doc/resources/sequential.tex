@@ -1,5 +1,5 @@
 \section{Sequential version}
-The sequential version of the algorithm is simply based on a while-loop that goes on until there are no swaps in the two phases, that are called inside the body of the loop.
+The sequential version of the algorithm is simply based on a while-loop that goes on until there are no swaps in the two phases, that are called inside the loop's body.
 
 \paragraph{Vectorization}
 The main optimization that I made concerns the way in which the swaps are performed: a first naive version used the \texttt{std::swap} function, but since the loop of swaps was working over an array and without dependencies between different iterations, I exploited the loop vectorization, by swapping the elements through assignments with the ternary operator.

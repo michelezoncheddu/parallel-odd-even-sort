@@ -116,6 +116,8 @@ To reduce the overheads, the workers don't send a dynamically allocated element 
 The same does the emitter, by sending a dummy pointer that will never be read from the workers.
 
 Finally, by moving the variables of the emitter from the struct to the \texttt{svc} method through the \texttt{static} qualifier, I obtained a 0.5\% of performance improvement.
+
+I tried the queues in blocking mode and no default thread mapping, and as expected I obtained worse performances in both cases.
 \bigbreak
 
 Here are the speedup and efficiency plots of the FastFlow version. For a better comparison, I kept the same scale of the previous plots.
@@ -164,5 +166,3 @@ Here are the speedup and efficiency plots of the FastFlow version. For a better 
     \end{tikzpicture}
     \caption{Efficiency of the FastFlow version}
 \end{figure}
-
-HOW TO RUN THE CODE
