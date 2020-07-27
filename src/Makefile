@@ -20,21 +20,20 @@
 #  the GNU General Public License.  This exception does not however
 #  invalidate any other reasons why the executable file might be covered by
 #  the GNU General Public License.
-#
 # ---------------------------------------------------------------------------
 
 
 FF_ROOT = /usr/local/include/fastflow
 
-CXX			= g++-9 -std=c++17 -Wall
+CXX			= g++ -std=c++14 -Wall
 INCLUDES	= -I . -I $(FF_ROOT)
-CXXFLAGS	= #-fopt-info-vec -fopt-info-vec-missed -DTRACE_FASTFLOW -DNO_DEFAULT_MAPPING -DBLOCKING_MODE -DFF_BOUNDED_BUFFER
+CXXFLAGS	= -DLINUX_MACHINE
 
 LDFLAGS 	= -pthread
 OPTFLAGS	= -O3 -march=native #-DNDEBUG
 
-TARGETS 	= seq		\
-              par		\
+TARGETS 	= seq	\
+              par	\
               ff
 
 .PHONY: all clean cleanall

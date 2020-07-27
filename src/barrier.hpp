@@ -11,10 +11,10 @@
 #include <atomic>
 
 class barrier {
-private:
+   private:
     std::atomic<int> n;
 
-public:
+   public:
     explicit barrier(int);
 
     void dec();

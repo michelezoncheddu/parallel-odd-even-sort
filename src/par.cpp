@@ -22,7 +22,7 @@ short cache_padding;
 bool finished = false;
 
 /**
- * @brief It performs an odd or an even sorting phase on the array
+ * @brief It performs an odd or an even sorting phase on the array.
  *
  * @tparam T the vector pointer type
  * @param v the pointer to the vector
@@ -45,16 +45,17 @@ unsigned odd_even_sort(T * const v, short const phase, size_t const end) {
 }
 
 /**
- * @brief
+ * @brief The business logic of the worker.
  *
- * @tparam T
- * @param thid
- * @param v
- * @param end (the index is included)
- * @param offset
- * @param phases
- * @param swaps
- * @param barriers
+ * @tparam T the vector pointer type
+ * @param thid the thread identifier
+ * @param v the pointer to the vector
+ * @param end the end position (included)
+ * @param offset if false, the odd positions in the pointer are odd positions in the whole array,
+ *               if true, the odd positions in the pointer are even positions in the whole array.
+ * @param phases the vector of phases progress
+ * @param swaps the vector of swaps
+ * @param barriers the synchronization barriers
  */
 template <typename T>
 void thread_body(int thid, T * const v, size_t const end, bool const offset, int const nw,
@@ -113,10 +114,11 @@ void thread_body(int thid, T * const v, size_t const end, bool const offset, int
 }
 
 /**
- * @brief
+ * @brief The business logic of the controller: checks in real time if there are swaps,
+ *        to keep the workers running or to stop them.
  *
- * @param swaps
- * @param barriers
+ * @param swaps the vector of swaps
+ * @param barriers the synchronization barriers
  */
 void controller_body(std::vector<unsigned> const &swaps, std::vector<std::unique_ptr<barrier>> const &barriers) {
     auto iter = 0;
@@ -196,8 +198,8 @@ int main(int argc, char const *argv[]) {
     std::vector<unsigned> phases(nw * cache_padding, 0);
     std::vector<unsigned> swaps(nw * cache_padding, 0);
 
-    std::vector<std::unique_ptr<std::thread>> threads;
-    threads.reserve(nw);
+    std::vector<std::unique_ptr<std::thread>> workers;
+    workers.reserve(nw);
 
     size_t const chunk_len = (v.size() - 1) / nw;
     long remaining = static_cast<long>((v.size() - 1) % nw);
@@ -206,14 +208,15 @@ int main(int argc, char const *argv[]) {
     std::thread controller(controller_body, std::cref(swaps), std::cref(barriers));
 
     for (int i = 0; i < nw; ++i) {
-        threads.push_back(std::make_unique<std::thread>(
+        workers.push_back(std::make_unique<std::thread>(
                 thread_body<vec_type>, i, ptr + offset, chunk_len + (remaining > 0), offset % 2, nw,
                 std::ref(phases), std::ref(swaps), std::cref(barriers)));
         offset += chunk_len + (remaining > 0);
         --remaining;
     }
 
-    // Thread pinning (works only on Linux)
+#ifdef LINUX_MACHINE
+    // Thread pinning
     auto const hw_concurrency = std::thread::hardware_concurrency();
     cpu_set_t cpuset;
     CPU_ZERO(&cpuset);
@@ -225,19 +228,20 @@ int main(int argc, char const *argv[]) {
     for (int i = 0; i < nw; ++i) {
         CPU_ZERO(&cpuset);
         CPU_SET((i + 1) % hw_concurrency, &cpuset);
-        if (0 != pthread_setaffinity_np(threads[i]->native_handle(), sizeof(cpu_set_t), &cpuset)) {
+        if (0 != pthread_setaffinity_np(workers[i]->native_handle(), sizeof(cpu_set_t), &cpuset)) {
             std::cout << "Error in thread pinning" << std::endl;
             return EXIT_FAILURE;
         }
     }
+#endif
 
     controller.join();
-    for (auto &thread : threads)
+    for (auto &thread : workers)
         thread->join();
     auto const duration = std::chrono::duration_cast<std::chrono::milliseconds>(
             std::chrono::system_clock::now() - start_time).count();
 
-    std::cout << "Time: " << duration << " (ms)" << std::endl;
+    std::cout << "Time: " << duration << " ms" << std::endl;
 
     assert(std::is_sorted(v.begin(), v.end()));
 

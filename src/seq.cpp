@@ -15,7 +15,7 @@
 #include <util.hpp>
 
 /**
- * @brief It performs an odd or an even sorting phase on the array
+ * @brief It performs an odd or an even sorting phase on the array.
  *
  * @tparam T the vector type
  * @param v the vector
@@ -56,8 +56,7 @@ int main(int argc, char const *argv[]) {
     else
         v = create_random_vector<vec_type>(n, MIN, MAX);
 
-    unsigned swaps;
-
+#ifdef LINUX_MACHINE
     // Dirty trick for getting the current thread handle (works only on Linux)
     auto thread_id = std::this_thread::get_id();
     auto native_handle = *reinterpret_cast<std::thread::native_handle_type*>(&thread_id);
@@ -68,7 +67,9 @@ int main(int argc, char const *argv[]) {
         std::cout << "Error in thread pinning" << std::endl;
         return EXIT_FAILURE;
     }
+#endif
 
+    unsigned swaps;
     auto const start_time = std::chrono::system_clock::now();
     do {
         swaps  = odd_even_sort(v, 1); // Odd phase
@@ -77,7 +78,7 @@ int main(int argc, char const *argv[]) {
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(
             std::chrono::system_clock::now() - start_time).count();
 
-    std::cout << "Time: " << duration << " (ms)" << std::endl;
+    std::cout << "Time: " << duration << " ms" << std::endl;
 
     assert(std::is_sorted(v.begin(), v.end()));
     return 0;

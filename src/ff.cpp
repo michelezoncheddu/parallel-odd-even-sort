@@ -42,13 +42,28 @@ unsigned odd_even_sort(T * const v, short const phase, size_t const end) {
     return swaps;
 }
 
+/**
+ * The emitter structure
+ */
 struct Emitter : ff_monode_t<unsigned> {
+    /**
+     * @brief The emitter constructor.
+     *
+     * @param nw the number of workers
+     */
     explicit Emitter(int nw) : nw{nw} {}
 
+    /**
+     * @brief It's the business logic of the emitter: it reads the number of swaps of any worker
+     *        from the feedback channels, and it starts a new phase, or stops the computation.
+     *
+     * @param task the number of swaps from the feedback
+     * @return the exit status
+     */
     unsigned* svc(unsigned *task) override {
         // Static variables instead of the struct-ones give slightly better performances
-        static unsigned remaining = 1; // The task that starts the emitter
-        static unsigned swaps = 1;
+        static unsigned remaining = 1;     // The task that starts the emitter
+        static unsigned swaps = 1;         // To don't read the starting task (it will be nullptr)
         static unsigned dummy_task = 0;
         static bool previous_zero = false; // I need to stop after two consecutive phases with no swaps
 
@@ -70,9 +85,26 @@ struct Emitter : ff_monode_t<unsigned> {
     int const nw;
 };
 
+/**
+ * The worker structure
+ */
 struct Worker : ff_node_t<unsigned> {
+    /**
+     * @brief The worker constructor.
+     *
+     * @param v the pointer to the vector
+     * @param end the end position (included)
+     * @param alignment if false, the odd positions in the pointer are odd positions in the whole array,
+     *                  if true, the odd positions in the pointer are even positions in the whole array.
+     */
     Worker(vec_type * const v, size_t const end, short alignment) : v{v}, end{end}, alignment{alignment} {}
 
+    /**
+     * @brief The business logic of the worker: it computes a sorting phase on its data.
+     *        Note that the task from the emitter is never read, since it's only a "start" signal.
+     *
+     * @return the number of swaps performed
+     */
     unsigned* svc(unsigned *) override {
         swaps = odd_even_sort(v, alignment, end);
 
