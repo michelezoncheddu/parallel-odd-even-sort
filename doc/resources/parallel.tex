@@ -1,7 +1,7 @@
 \section{Parallel versions}
 
 \subsection{Native threads}
-The goal of the parallel version is to sort the global array, by splitting the array in chunks to give to each thread. Every thread needs to run the odd and the even phase on its partition, and it also needs to consider its neighbors (otherwise it would perform a local sorting, not a global one). This kind of pattern is called \textit{stencil}, and in this case it's used inside an iterative loop that goes on until two consecutive phases end with no swaps. The ``odd-even'' function is the one to be mapped, and its parameters are the bounds (fixed for each thread) and the phase (odd or even).
+The goal of the parallel version is to sort the global array, by splitting the array in chunks to give to each thread. Every thread needs to run the odd and the even phase on its partition, and it also needs to consider its neighbors (otherwise it would perform a local sorting, not a global one). The ``odd-even'' function is the one to be mapped, and its parameters are the bounds (fixed for each thread) and the phase (odd or even).
 
 \paragraph{Data partitioning}
 The simplest division of the work is the static block distribution. Each thread (except for the last one) shares its last element with another thread. If the array has $n$ elements and there are $nw$ workers, I have $nw - 1$ overlapping points. It's like I have to split $n + nw - 1$ elements among $nw$ workers. Simplifying, the average chunk length is $\frac{n - 1}{nw} + 1$ (if $n - 1$ is not divisible by $nw$, the remaining elements will be distributed uniformly). Here is an example with $n = 10$ and $nw = 4$.
@@ -52,7 +52,7 @@ Since the Xeon for the tests has no MCDRAM installed, and therefore its mesh is 
 \paragraph{Performances}
 Here are the results of speedup and efficiency, tested on array from 100K to 600K elements. Smaller arrays are not considered because of the relatively small execution time also with the sequential version (e.g. sorting sequentially 50K elements takes less than one second). With the basic 128 bit vectorization, I was able to reach higher speedups on few elements (17x on 100K elements). Why? Because the total execution time was 4 times higher than the 512 bit vectorized version, hence the fixed overheads were more hidden. Probably, a 4 times bigger L1 cache would help to achieve higher speedups, by keeping keep the same ``vectorization vs. L1 cache size'' ratio and reducing the overhead of prefetching, but some overheads are fixed and cannot be reduced in this way, like the atomic barrier.
 
-We can notice a superlinear behavior when the partitions have comparable size with the L1 cache (64KB per core, 16K C++ integers), but also the global problem size is important, because the odd-even sort is a quadratic algorithm, not a linear one (if I double the problem size, I have more than the double of the work to hide overheads with).
+We can notice a superlinear behavior when the partitions have comparable size with the L1 cache (32KB per core, 8K C++ 32-bit integers), but also the global problem size is important, because the odd-even sort is a quadratic algorithm, not a linear one (if I double the problem size, I have more than the double of the work to hide overheads with).
 \bigbreak
 
 \begin{figure}[ht!]
